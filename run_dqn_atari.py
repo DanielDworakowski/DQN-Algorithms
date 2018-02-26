@@ -4,12 +4,13 @@ import torch
 import random
 import argparse
 import numpy as np
+import deepMindModel
 import os.path as osp
 from dqn_utils import *
 from gym import wrappers
 from atari_wrappers import *
 
-def atari_learn(env, session, num_timesteps):
+def atari_learn(env, num_timesteps):
     # This is just a rough estimate
     num_iterations = float(num_timesteps) / 4.0
 
@@ -21,9 +22,9 @@ def atari_learn(env, session, num_timesteps):
                                     ],
                                     outside_value=5e-5 * lr_multiplier)
     
-    model = atari_model(env.action_space.n)
+    model = deepMindModel.atari_model(env.action_space.n)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_multiplier, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
-    schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda epoch: lr_schedule(epoch))
+    schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda epoch: lr_schedule.value(epoch))
 
     def stopping_criterion(env, t):
         # notice that here t is the number of steps of the wrapped env,
@@ -39,9 +40,9 @@ def atari_learn(env, session, num_timesteps):
 
     dqn.learn(
         env,
-        q_func = atari_model,
+        q_func = deepMindModel.atari_model,
         optimizer_spec = optimizer,
-        session = session,
+        lr_schedule = schedule,
         exploration = exploration_schedule,
         stopping_criterion = stopping_criterion,
         replay_buffer_size = 1000000,
@@ -68,19 +69,19 @@ def configureEnv(env):
     expt_dir = '/tmp/hw3_vid_dir2/'
     env = wrappers.Monitor(env, osp.join(expt_dir, "gym"), force=True)
     env = wrap_deepmind(env)
-
+    print(env)
     return env
 
 def main():
 
     # Run training 
     specs = gym.envs.registry
-    env = gym.make('Pong-v0')
+    env = gym.make('PongNoFrameskip-v0')
     setRandomSeeds(0, env)
-    configureEnv(env)
+    env = configureEnv(env)
     # env = get_env(task, seed)
     # tmp = specs.env_specs['Pong-v0'].timestep_limit
-    atari_learn(env, session, num_timesteps=1e7)
+    atari_learn(env, num_timesteps=1e7)
 
 if __name__ == "__main__":
     main()

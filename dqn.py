@@ -1,19 +1,38 @@
 import sys
-import gym.spaces
-import itertools
-import numpy as np
+import copy
 import random
-import tensorflow as tf
-import tensorflow.contrib.layers as layers
-from collections import namedtuple
+import itertools
+import gym.spaces
+import numpy as np
 from dqn_utils import *
+from collections import namedtuple
+from torch.autograd import Variable
+import torchvision.transforms as transforms
+
+use_cuda = torch.cuda.is_available()
+toTensorImg = transforms.ToTensor()
+toTensor = torch.from_numpy
+if use_cuda:
+    def cudaTensorImg(x):
+        print('May need to reorder dimensions.')
+        ret = torch.from_numpy(x).cuda(async=True).div_(255)
+        return ret
+    def cudaTensor(x):
+        ret = torch.from_numpy(x).cuda(async=True)
+        return ret
+    toTensorImg = cudaTensorImg
+    toTensor = cudaTensor
+
+FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
+ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
 
 OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs", "lr_schedule"])
 
 def learn(env,
           q_func,
           optimizer_spec,
-          session,
+          lr_schedule,
           exploration=LinearSchedule(1000000, 0.1),
           stopping_criterion=None,
           replay_buffer_size=1000000,
@@ -49,8 +68,6 @@ def learn(env,
     optimizer_spec: OptimizerSpec
         Specifying the constructor and kwargs, as well as learning rate schedule
         for the optimizer
-    session: tf.Session
-        tensorflow session to use.
     exploration: rl_algs.deepq.utils.schedules.Schedule
         schedule for probability of chosing random action.
     stopping_criterion: (env, t) -> bool
@@ -80,34 +97,35 @@ def learn(env,
     ###############
     # BUILD MODEL #
     ###############
-
+    nAct = env.action_space.n
     if len(env.observation_space.shape) == 1:
         # This means we are running on low-dimensional observations (e.g. RAM)
         input_shape = env.observation_space.shape
     else:
         img_h, img_w, img_c = env.observation_space.shape
         input_shape = (img_h, img_w, frame_history_len * img_c)
-    num_actions = env.action_space.n
 
-    # set up placeholders
-    # placeholder for current observation (or state)
-    obs_t_ph              = tf.placeholder(tf.uint8, [None] + list(input_shape))
-    # placeholder for current action
-    act_t_ph              = tf.placeholder(tf.int32,   [None])
-    # placeholder for current reward
-    rew_t_ph              = tf.placeholder(tf.float32, [None])
-    # placeholder for next observation (or state)
-    obs_tp1_ph            = tf.placeholder(tf.uint8, [None] + list(input_shape))
-    # placeholder for end of episode mask
-    # this value is 1 if the next state corresponds to the end of an episode,
-    # in which case there is no Q-value at the next state; at the end of an
-    # episode, only the current state reward contributes to the target, not the
-    # next state Q-value (i.e. target is just rew_t_ph, not rew_t_ph + gamma * q_tp1)
-    done_mask_ph          = tf.placeholder(tf.float32, [None])
 
-    # casting to float on GPU ensures lower data transfer times.
-    obs_t_float   = tf.cast(obs_t_ph,   tf.float32) / 255.0
-    obs_tp1_float = tf.cast(obs_tp1_ph, tf.float32) / 255.0
+                    # # set up placeholders
+                    # # placeholder for current observation (or state)
+                    # obs_t_ph              = tf.placeholder(tf.uint8, [None] + list(input_shape))
+                    # # placeholder for current action
+                    # act_t_ph              = tf.placeholder(tf.int32,   [None])
+                    # # placeholder for current reward
+                    # rew_t_ph              = tf.placeholder(tf.float32, [None])
+                    # # placeholder for next observation (or state)
+                    # obs_tp1_ph            = tf.placeholder(tf.uint8, [None] + list(input_shape))
+                    # # placeholder for end of episode mask
+                    # # this value is 1 if the next state corresponds to the end of an episode,
+                    # # in which case there is no Q-value at the next state; at the end of an
+                    # # episode, only the current state reward contributes to the target, not the
+                    # # next state Q-value (i.e. target is just rew_t_ph, not rew_t_ph + gamma * q_tp1)
+                    # done_mask_ph          = tf.placeholder(tf.float32, [None])
+
+
+    # # casting to float on GPU ensures lower data transfer times.
+    # obs_t_float   = tf.cast(obs_t_ph,   tf.float32) / 255.0
+    # obs_tp1_float = tf.cast(obs_tp1_ph, tf.float32) / 255.0
 
     # Here, you should fill in your own code to compute the Bellman error. This requires
     # evaluating the current and next Q-values and constructing the corresponding error.
@@ -126,23 +144,43 @@ def learn(env,
     # q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
     # Older versions of TensorFlow may require using "VARIABLES" instead of "GLOBAL_VARIABLES"
     ######
-
-    # YOUR CODE HERE
-
+    
+    nextBatchVect = toTensor(np.zeros((batch_size, 1)))
+    def bellmanError(trainNet, targetNet, samples, gamma):
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = samples
+        # 
+        # Convert everything to be tensors, send to the GPU as needed.
+        obs = toTensorImg(obs_batch)
+        act = toTensor(act_batch)
+        rew = Variable(toTensor(rew_batch), volatile=True)
+        notDoneMask = (done_mask == False)
+        nextValidObs = next_obs_batch[notDoneMask]
+        nextValidObs = toTensorImg(nextValidObs)
+        notDoneTensor = toTensor(notDoneMask)
+        # 
+        # Forward through both networks. 
+        trainQ = trainNet(Variable(obs)).index_select(0, act)
+        # 
+        # Not all have a next observation -> some finished. 
+        targetQ = targetNet(Variable(nextValidObs, volatile=True)).max(dim=0)
+        nextBatchVect.zero_()
+        nextBatchVect.masked_scatter_(notDoneTensor, targetQ)
+        # 
+        # Calculate the belman error.
+        expectedQ = targetQ * gamma + rew
+        return trainQ, expectedQ
     ######
 
     # construct optimization op (with gradient clipping)
-    learning_rate = tf.placeholder(tf.float32, (), name="learning_rate")
-    optimizer = optimizer_spec.constructor(learning_rate=learning_rate, **optimizer_spec.kwargs)
-    train_fn = minimize_and_clip(optimizer, total_error,
-                 var_list=q_func_vars, clip_val=grad_norm_clipping)
+                    # train_fn = minimize_and_clip(optimizer, total_error,
+                    #              var_list=q_func_vars, clip_val=grad_norm_clipping)
 
-    # update_target_fn will be called periodically to copy Q network to target Q network
-    update_target_fn = []
-    for var, var_target in zip(sorted(q_func_vars,        key=lambda v: v.name),
-                               sorted(target_q_func_vars, key=lambda v: v.name)):
-        update_target_fn.append(var_target.assign(var))
-    update_target_fn = tf.group(*update_target_fn)
+                    # # update_target_fn will be called periodically to copy Q network to target Q network
+                    # update_target_fn = []
+                    # for var, var_target in zip(sorted(q_func_vars,        key=lambda v: v.name),
+                    #                            sorted(target_q_func_vars, key=lambda v: v.name)):
+                    #     update_target_fn.append(var_target.assign(var))
+                    # update_target_fn = tf.group(*update_target_fn)
 
     # construct the replay buffer
     replay_buffer = ReplayBuffer(replay_buffer_size, frame_history_len)
@@ -156,6 +194,8 @@ def learn(env,
     best_mean_episode_reward = -float('inf')
     last_obs = env.reset()
     LOG_EVERY_N_STEPS = 10000
+    trainQ_func = q_func(nAct)
+    targetQ_func = copy.deepcopy(trainQ_func).eval()
 
     for t in itertools.count():
         pass
@@ -194,8 +234,25 @@ def learn(env,
         # might as well be random, since you haven't trained your net...)
 
         #####
-
-        # YOUR CODE HERE
+        # 
+        # Store the latest frame in the replay buffer. 
+        storeIndex = replay_buffer.store_frame(last_obs)
+        # 
+        # Epsilon greedy exploration.
+        action = None
+        if random.random() < exploration.value(t):
+            action = random.randint(0, nAct)
+        else:
+            obs = toTensorImg(replay_buffer.encode_recent_observation())
+            # 
+            # Forward through network. 
+            action = torch.argMax(targetQ_func(obs))
+        last_obs, reward, done, info = env.step(action)
+        replay_buffer.store_effect(storeIndex, action, reward, done)
+        # 
+        # Reset as needed.
+        if done:
+            last_obs = env.reset()
 
         #####
 
@@ -210,7 +267,6 @@ def learn(env,
         if (t > learning_starts and
                 t % learning_freq == 0 and
                 replay_buffer.can_sample(batch_size)):
-            pass
             # Here, you should perform training. Training consists of four steps:
             # 3.a: use the replay buffer to sample a batch of transitions (see the
             # replay buffer code for function definition, each batch that you sample
@@ -244,11 +300,26 @@ def learn(env,
             # session.run(update_target_fn)
             # you should update every target_update_freq steps, and you may find the
             # variable num_param_updates useful for this (it was initialized to 0)
-            #####
+            
+            # 
+            # Sample from replay buffer.
+            sample = replay_buffer.sample(batch_size)
+            # 
+            # Train the model
+            trainQ, targetQ = bellmanError(q_func, targetQ_func, sample, gamma)
+            # 
+            # Calculate Huber loss. 
+            optimizer.zero_grad()
+            loss = F.smooth_l1_loss(trainQ, targetQ)
+            loss.backward()
+            optimizer.step()
+            lr_schedule.step()
+            # 
+            # Update the target network as needed (target_update_freq).
+            if t % target_update_freq == 0:
+                targetQ_func = copy.deepcopy(trainQ_func)
+                targetQ_func.eval()
 
-            # YOUR CODE HERE
-
-            #####
 
         ### 4. Log progress
         episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
