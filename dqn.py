@@ -194,8 +194,7 @@ def learn(env,
     ###############
     # RUN ENV     #
     ###############
-    model_initialized = False
-    num_param_updates = 0
+\    num_param_updates = 0
     mean_episode_reward      = -float('nan')
     best_mean_episode_reward = -float('inf')
     last_obs = env.reset()
