@@ -21,5 +21,6 @@ class atari_model(torch.nn.Module):
         out = self.relu(out)
         out = out.view(x.shape[0], -1)
         out = self.fc1(out)
+        out = self.relu(out)
         out = self.fc2(out)
         return out

@@ -24,7 +24,10 @@ def atari_learn(env, num_timesteps):
 
     model = deepMindModel.atari_model(env.action_space.n)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_multiplier, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
-    schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda epoch: lr_schedule.value(epoch))
+    def sched(epoch):
+        return lr_schedule.value(epoch)
+    # schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda epoch: lr_schedule.value(epoch))
+    schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = sched)
 
     def stopping_criterion(env, t):
         # notice that here t is the number of steps of the wrapped env,
@@ -40,7 +43,7 @@ def atari_learn(env, num_timesteps):
 
     dqn.learn(
         env,
-        q_func = deepMindModel.atari_model,
+        q_func = model,
         optimizer = optimizer,
         lr_schedule = schedule,
         lr_scheduler = lr_schedule,

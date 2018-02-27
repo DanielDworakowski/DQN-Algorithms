@@ -151,29 +151,29 @@ def learn(env,
     # Older versions of TensorFlow may require using "VARIABLES" instead of "GLOBAL_VARIABLES"
     ######
 
-    nextBatchVect = toTensor(np.zeros((batch_size), dtype=np.float32))
     def bellmanError(trainNet, targetNet, samples, gamma):
         obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = samples
         #
         # Convert everything to be tensors, send to the GPU as needed.
-        obs = toTensorImg(obs_batch)
-        act = toTensor(act_batch.astype(np.int_))
-        rew = Variable(toTensor(rew_batch), volatile=True)
+        act = Variable(toTensor(act_batch.astype(np.int_)))
+        rew = Variable(toTensor(rew_batch))
+        obs = Variable(toTensorImg(obs_batch))
+        expectedQ = Variable(toTensor(np.zeros((batch_size), dtype=np.float32)))
         notDoneMask = (done_mask == False).astype(np.uint8)
         nextValidObs = next_obs_batch[notDoneMask]
         nextValidObs = toTensorImg(nextValidObs)
-        notDoneTensor = toTensor(notDoneMask)
+        notDoneTensor = Variable(toTensor(notDoneMask))
         #
         # Forward through both networks.
-        trainQ = torch.gather(trainNet(Variable(obs)), 1, Variable(act).unsqueeze_(1))
+        trainQ = torch.gather(trainNet(obs), 1, act.unsqueeze_(1))
         #
         # Not all have a next observation -> some finished.
-        targetQ, _ = targetNet(Variable(nextValidObs, volatile=True)).max(1)
-        nextBatchVect.zero_()
-        nextBatchVect.masked_scatter_(notDoneTensor, targetQ.data)
+        targetQValid, _ = targetNet(Variable(nextValidObs, volatile=True)).max(1)
+        expectedQ.masked_scatter_(notDoneTensor, targetQValid)
         #
         # Calculate the belman error.
-        expectedQ = targetQ * gamma + rew
+        expectedQ.volatile = False
+        expectedQ = expectedQ.mul_(gamma) + rew
         return trainQ, expectedQ
     ######
 
@@ -200,7 +200,7 @@ def learn(env,
     best_mean_episode_reward = -float('inf')
     last_obs = env.reset()
     LOG_EVERY_N_STEPS = 10000
-    trainQ_func = q_func(nAct)
+    trainQ_func = q_func
     targetQ_func = copy.deepcopy(trainQ_func).eval()
     #
     # Send networks to CUDA.
@@ -255,11 +255,15 @@ def learn(env,
         if random.random() < exploration.value(t):
             action = random.randint(0, nAct - 1)
         else:
+            from PIL import Image
             obs = toTensorImg(np.expand_dims(replay_buffer.encode_recent_observation(), axis=0))
             #
             # Forward through network.
-            _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
+            _, action = trainQ_func(Variable(obs, volatile=True)).max(1)
+            # _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
+
             action = action.data.cpu().numpy()
+            # print(action)
 
         last_obs, reward, done, info = env.step(action)
         replay_buffer.store_effect(storeIndex, action, reward, done)
@@ -323,11 +327,12 @@ def learn(env,
             trainQ, targetQ = bellmanError(trainQ_func, targetQ_func, sample, gamma)
             #
             # Calculate Huber loss.
-            optimizer.zero_grad()
             loss = F.smooth_l1_loss(trainQ, targetQ)
+            optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
             optimizer.step()
-            lr_schedule.step()
+            lr_schedule.step(t)
             #
             # Update the target network as needed (target_update_freq).
             if t % target_update_freq == 0:
@@ -349,5 +354,6 @@ def learn(env,
             print("best mean reward %f" % best_mean_episode_reward)
             print("episodes %d" % len(episode_rewards))
             print("exploration %f" % exploration.value(t))
-            print("learning_rate %f" % lr_scheduler.value(t))
+            print("learning_rate_schedule %f" % lr_scheduler.value(t))
+            print("learning_rate ", lr_schedule.get_lr())
             sys.stdout.flush()
