@@ -255,15 +255,12 @@ def learn(env,
         if random.random() < exploration.value(t):
             action = random.randint(0, nAct - 1)
         else:
-            from PIL import Image
             obs = toTensorImg(np.expand_dims(replay_buffer.encode_recent_observation(), axis=0))
             #
             # Forward through network.
             _, action = trainQ_func(Variable(obs, volatile=True)).max(1)
             # _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
-
             action = action.data.cpu().numpy()
-            # print(action)
 
         last_obs, reward, done, info = env.step(action)
         replay_buffer.store_effect(storeIndex, action, reward, done)
@@ -333,9 +330,10 @@ def learn(env,
             torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
             optimizer.step()
             lr_schedule.step(t)
+            num_param_updates += 1
             #
             # Update the target network as needed (target_update_freq).
-            if t % target_update_freq == 0:
+            if num_param_updates % target_update_freq == 0:
                 targetQ_func = copy.deepcopy(trainQ_func)
                 targetQ_func.eval()
                 if use_cuda:
