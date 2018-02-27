@@ -21,7 +21,7 @@ def atari_learn(env, num_timesteps):
                                          (num_iterations / 2,  5e-5 * lr_multiplier),
                                     ],
                                     outside_value=5e-5 * lr_multiplier)
-    
+
     model = deepMindModel.atari_model(env.action_space.n)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_multiplier, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
     schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda epoch: lr_schedule.value(epoch))
@@ -43,6 +43,7 @@ def atari_learn(env, num_timesteps):
         q_func = deepMindModel.atari_model,
         optimizer = optimizer,
         lr_schedule = schedule,
+        lr_scheduler = lr_schedule,
         exploration = exploration_schedule,
         stopping_criterion = stopping_criterion,
         replay_buffer_size = 1000000,
@@ -73,7 +74,7 @@ def configureEnv(env):
 
 def main():
 
-    # Run training 
+    # Run training
     env = gym.make('PongNoFrameskip-v0')
     setRandomSeeds(0, env)
     env = configureEnv(env)

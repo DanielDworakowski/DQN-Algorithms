@@ -24,8 +24,7 @@ toTensorImg = cpuTensorImg
 toTensor = cpuTensor
 if use_cuda:
     def cudaTensorImg(x):
-        print('May need to reorder dimensions.')
-        ret = torch.from_numpy(x.transpose((0,3,1,2))).cuda(async=True).type(FloatTensor).div_(255)
+        ret = torch.from_numpy(x.transpose((0,3,1,2))).contiguous().cuda(async=True).type(FloatTensor).div_(255)
         return ret
     def cudaTensor(x):
         ret = torch.from_numpy(x).cuda(async=True)
@@ -39,6 +38,7 @@ def learn(env,
           q_func,
           optimizer,
           lr_schedule,
+          lr_scheduler,
           exploration=LinearSchedule(1000000, 0.1),
           stopping_criterion=None,
           replay_buffer_size=1000000,
@@ -150,11 +150,11 @@ def learn(env,
     # q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
     # Older versions of TensorFlow may require using "VARIABLES" instead of "GLOBAL_VARIABLES"
     ######
-    
+
     nextBatchVect = toTensor(np.zeros((batch_size), dtype=np.float32))
     def bellmanError(trainNet, targetNet, samples, gamma):
         obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = samples
-        # 
+        #
         # Convert everything to be tensors, send to the GPU as needed.
         obs = toTensorImg(obs_batch)
         act = toTensor(act_batch.astype(np.int_))
@@ -163,15 +163,15 @@ def learn(env,
         nextValidObs = next_obs_batch[notDoneMask]
         nextValidObs = toTensorImg(nextValidObs)
         notDoneTensor = toTensor(notDoneMask)
-        # 
-        # Forward through both networks. 
+        #
+        # Forward through both networks.
         trainQ = torch.gather(trainNet(Variable(obs)), 1, Variable(act).unsqueeze_(1))
-        # 
-        # Not all have a next observation -> some finished. 
+        #
+        # Not all have a next observation -> some finished.
         targetQ, _ = targetNet(Variable(nextValidObs, volatile=True)).max(1)
         nextBatchVect.zero_()
         nextBatchVect.masked_scatter_(notDoneTensor, targetQ.data)
-        # 
+        #
         # Calculate the belman error.
         expectedQ = targetQ * gamma + rew
         return trainQ, expectedQ
@@ -202,7 +202,13 @@ def learn(env,
     LOG_EVERY_N_STEPS = 10000
     trainQ_func = q_func(nAct)
     targetQ_func = copy.deepcopy(trainQ_func).eval()
-
+    #
+    # Send networks to CUDA.
+    if use_cuda:
+        trainQ_func.cuda()
+        targetQ_func.cuda()
+    #
+    # Training loop.
     for t in itertools.count():
         pass
         ### 1. Check stopping criterion
@@ -240,25 +246,24 @@ def learn(env,
         # might as well be random, since you haven't trained your net...)
 
         #####
-        # 
-        # Store the latest frame in the replay buffer. 
+        #
+        # Store the latest frame in the replay buffer.
         storeIndex = replay_buffer.store_frame(last_obs)
-        # 
+        #
         # Epsilon greedy exploration.
         action = None
         if random.random() < exploration.value(t):
             action = random.randint(0, nAct - 1)
         else:
             obs = toTensorImg(np.expand_dims(replay_buffer.encode_recent_observation(), axis=0))
-            # 
-            # Forward through network. 
-            inter = targetQ_func(Variable(obs, volatile=True))
-            _, action = inter.max(1)
-            action = action.data.numpy()
+            #
+            # Forward through network.
+            _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
+            action = action.data.cpu().numpy()
 
         last_obs, reward, done, info = env.step(action)
         replay_buffer.store_effect(storeIndex, action, reward, done)
-        # 
+        #
         # Reset as needed.
         if done:
             last_obs = env.reset()
@@ -309,25 +314,27 @@ def learn(env,
             # session.run(update_target_fn)
             # you should update every target_update_freq steps, and you may find the
             # variable num_param_updates useful for this (it was initialized to 0)
-            
-            # 
+
+            #
             # Sample from replay buffer.
             sample = replay_buffer.sample(batch_size)
-            # 
+            #
             # Train the model
             trainQ, targetQ = bellmanError(trainQ_func, targetQ_func, sample, gamma)
-            # 
-            # Calculate Huber loss. 
+            #
+            # Calculate Huber loss.
             optimizer.zero_grad()
             loss = F.smooth_l1_loss(trainQ, targetQ)
             loss.backward()
             optimizer.step()
             lr_schedule.step()
-            # 
+            #
             # Update the target network as needed (target_update_freq).
             if t % target_update_freq == 0:
                 targetQ_func = copy.deepcopy(trainQ_func)
                 targetQ_func.eval()
+                if use_cuda:
+                    targetQ_func.cuda()
 
 
         ### 4. Log progress
@@ -336,11 +343,11 @@ def learn(env,
             mean_episode_reward = np.mean(episode_rewards[-100:])
         if len(episode_rewards) > 100:
             best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
-        if t % LOG_EVERY_N_STEPS == 0 and model_initialized:
+        if t % LOG_EVERY_N_STEPS == 0:
             print("Timestep %d" % (t,))
             print("mean reward (100 episodes) %f" % mean_episode_reward)
             print("best mean reward %f" % best_mean_episode_reward)
             print("episodes %d" % len(episode_rewards))
             print("exploration %f" % exploration.value(t))
-            print("learning_rate %f" % optimizer_spec.lr_schedule.value(t))
+            print("learning_rate %f" % lr_scheduler.value(t))
             sys.stdout.flush()
