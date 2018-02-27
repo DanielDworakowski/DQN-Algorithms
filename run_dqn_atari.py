@@ -9,8 +9,16 @@ import os.path as osp
 from dqn_utils import *
 from gym import wrappers
 from atari_wrappers import *
+#
+# Parse the input arguments.
+def getInputArgs():
+    parser = argparse.ArgumentParser('Configuration options.')
+    parser.add_argument('--useTB', dest='useTB', default=False, action='store_true', help='Whether or not to log to Tesnor board.')
 
-def atari_learn(env, num_timesteps):
+    args = parser.parse_args()
+    return args
+
+def atari_learn(env, num_timesteps, args):
     # This is just a rough estimate
     num_iterations = float(num_timesteps) / 4.0
 
@@ -52,11 +60,12 @@ def atari_learn(env, num_timesteps):
         replay_buffer_size = 1000000,
         batch_size = 32,
         gamma = 0.99,
-        learning_starts = 50000,
+        learning_starts = 5000,
         learning_freq = 4,
         frame_history_len = 4,
         target_update_freq = 10000,
-        grad_norm_clipping = 10
+        grad_norm_clipping = 10,
+        useTB = args.useTB
     )
     env.close()
 
@@ -76,14 +85,15 @@ def configureEnv(env):
     return env
 
 def main():
-
-    # Run training
+    args = getInputArgs()
+    # 
+    # Environment config
     env = gym.make('PongNoFrameskip-v0')
     setRandomSeeds(0, env)
     env = configureEnv(env)
-    # env = get_env(task, seed)
-    # tmp = specs.env_specs['Pong-v0'].timestep_limit
-    atari_learn(env, num_timesteps=1e7)
+    # 
+    # The learning fn.
+    atari_learn(env, num_timesteps=1e7, args=args)
 
 if __name__ == "__main__":
     main()

@@ -289,7 +289,7 @@ class ReplayBuffer(object):
         """
         if self.obs is None:
             self.obs      = np.empty([self.size] + list(frame.shape), dtype=np.uint8)
-            self.action   = np.empty([self.size],                     dtype=np.int32)
+            self.action   = np.empty([self.size],                     dtype=np.int_)
             self.reward   = np.empty([self.size],                     dtype=np.float32)
             self.done     = np.empty([self.size],                     dtype=np.bool)
         self.obs[self.next_idx] = frame

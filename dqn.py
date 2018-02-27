@@ -4,36 +4,73 @@ import random
 import itertools
 import gym.spaces
 import numpy as np
+from tqdm import tqdm
 from dqn_utils import *
 import torch.nn.functional as F
 from collections import namedtuple
 from torch.autograd import Variable
+from tensorboardX import SummaryWriter
 import torchvision.transforms as transforms
-
-
-use_cuda = torch.cuda.is_available()
-FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
-LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
-ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
-
-def cpuTensorImg(x):
-    return torch.from_numpy(x.transpose((0,3,1,2))).type(FloatTensor).div_(255)
-def cpuTensor(x):
-    return torch.from_numpy(x)
-toTensorImg = cpuTensorImg
-toTensor = cpuTensor
-if use_cuda:
-    def cudaTensorImg(x):
-        ret = torch.from_numpy(x.transpose((0,3,1,2))).contiguous().cuda(async=True).type(FloatTensor).div_(255)
-        return ret
-    def cudaTensor(x):
-        ret = torch.from_numpy(x).cuda(async=True)
-        return ret
-    toTensorImg = cudaTensorImg
-    toTensor = cudaTensor
-
-OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs", "lr_schedule"])
-
+# 
+# Configuration.
+def getTensorConfiguration():
+    use_cuda = torch.cuda.is_available()
+    FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+    LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
+    ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
+    # 
+    # Default transforms.
+    def cpuTensorImg(x):
+        return torch.from_numpy(x.transpose((0,3,1,2))).type(FloatTensor).div_(255)
+    def cpuTensor(x):
+        return torch.from_numpy(x)
+    toTensorImg = cpuTensorImg
+    toTensor = cpuTensor
+    # 
+    # Cuda transforms.
+    if use_cuda:
+        def cudaTensorImg(x):
+            ret = torch.from_numpy(x.transpose((0,3,1,2))).contiguous().cuda(async=True).type(FloatTensor).div_(255)
+            return ret
+        def cudaTensor(x):
+            ret = torch.from_numpy(x).cuda(async=True)
+            return ret
+        toTensorImg = cudaTensorImg
+        toTensor = cudaTensor
+    return toTensorImg, toTensor, use_cuda
+# 
+# Visualize a batch.
+def visobs(obs):
+    from PIL import Image
+    obsBatch = obs.data.cpu().numpy()
+    for i, obs in enumerate(obsBatch):
+        for plane in obs:
+            img = Image.fromarray(plane*255)
+            img.show()
+        if i == 5:
+            sys.exit(0)
+# 
+# Logging configuration.
+def logEpochTensorboard(logger, model, epochSummary, t):
+    # logger.add_scalar('%s_loss'%epochSummary['phase'], epochSummary['loss'], epochSummary['epoch'])
+    # logger.add_scalar('%s_acc'%epochSummary['phase'], epochSummary['acc'], epochSummary['epoch'])
+    # labels = epochSummary['data']['label']
+    # for i in range(epochSummary['data']['label'].shape[0]):
+    #     logger.add_image('{}_image_i-{}_epoch-{}_pre-:{}_label-{}'.format(epochSummary['phase'], i, epochSummary['epoch'], epochSummary['pred'][i], int(labels[i])), epochSummary['data']['img'][i]*math.sqrt(0.06342617) + 0.59008044, epochSummary['epoch'])
+    for key in epochSummary:
+        logger.add_scalar(key, epochSummary[key], t)
+    for name, param in model.named_parameters():
+        logger.add_histogram(name, param.clone().cpu().data.numpy(), t)
+#
+# Write everything as needed.
+def closeTensorboard(logger):
+    logger.close()
+#
+# When not using tensor board.
+def doNothing(logger = None, model = None, tmp = None, tmp1 = None):
+    pass
+# 
+# Training fn.
 def learn(env,
           q_func,
           optimizer,
@@ -48,7 +85,8 @@ def learn(env,
           learning_freq=4,
           frame_history_len=4,
           target_update_freq=10000,
-          grad_norm_clipping=10):
+          grad_norm_clipping=10,
+          useTB=False):
     """Run Deep Q-learning algorithm.
 
     You can specify your own convnet using q_func.
@@ -103,35 +141,21 @@ def learn(env,
     ###############
     # BUILD MODEL #
     ###############
+    # 
+    # Environment information.
     nAct = env.action_space.n
-    if len(env.observation_space.shape) == 1:
-        # This means we are running on low-dimensional observations (e.g. RAM)
-        input_shape = env.observation_space.shape
-    else:
-        img_h, img_w, img_c = env.observation_space.shape
-        input_shape = (img_h, img_w, frame_history_len * img_c)
-
-
-                    # # set up placeholders
-                    # # placeholder for current observation (or state)
-                    # obs_t_ph              = tf.placeholder(tf.uint8, [None] + list(input_shape))
-                    # # placeholder for current action
-                    # act_t_ph              = tf.placeholder(tf.int32,   [None])
-                    # # placeholder for current reward
-                    # rew_t_ph              = tf.placeholder(tf.float32, [None])
-                    # # placeholder for next observation (or state)
-                    # obs_tp1_ph            = tf.placeholder(tf.uint8, [None] + list(input_shape))
-                    # # placeholder for end of episode mask
-                    # # this value is 1 if the next state corresponds to the end of an episode,
-                    # # in which case there is no Q-value at the next state; at the end of an
-                    # # episode, only the current state reward contributes to the target, not the
-                    # # next state Q-value (i.e. target is just rew_t_ph, not rew_t_ph + gamma * q_tp1)
-                    # done_mask_ph          = tf.placeholder(tf.float32, [None])
-
-
-    # # casting to float on GPU ensures lower data transfer times.
-    # obs_t_float   = tf.cast(obs_t_ph,   tf.float32) / 255.0
-    # obs_tp1_float = tf.cast(obs_tp1_ph, tf.float32) / 255.0
+    # 
+    # Information for tensor configuration.
+    toTensorImg, toTensor, use_cuda = getTensorConfiguration()
+    # 
+    # Logging setup.
+    logger = None
+    logEpoch = doNothing
+    closeLogger = doNothing
+    if useTB:
+        logger = SummaryWriter()
+        logEpoch = logEpochTensorboard
+        closeLogger = closeTensorboard
 
     # Here, you should fill in your own code to compute the Bellman error. This requires
     # evaluating the current and next Q-values and constructing the corresponding error.
@@ -155,21 +179,21 @@ def learn(env,
         obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = samples
         #
         # Convert everything to be tensors, send to the GPU as needed.
-        act = Variable(toTensor(act_batch.astype(np.int_)))
+        notDoneMask = (done_mask == False).astype(np.uint8)
+        nextValidObs = next_obs_batch.compress(notDoneMask, axis=0)
+        act = Variable(toTensor(act_batch))
         rew = Variable(toTensor(rew_batch))
         obs = Variable(toTensorImg(obs_batch))
         expectedQ = Variable(toTensor(np.zeros((batch_size), dtype=np.float32)))
-        notDoneMask = (done_mask == False).astype(np.uint8)
-        nextValidObs = next_obs_batch[notDoneMask]
-        nextValidObs = toTensorImg(nextValidObs)
+        nextValidObs = Variable(toTensorImg(nextValidObs), volatile = True)
         notDoneTensor = Variable(toTensor(notDoneMask))
         #
         # Forward through both networks.
         trainQ = torch.gather(trainNet(obs), 1, act.unsqueeze_(1))
         #
         # Not all have a next observation -> some finished.
-        targetQValid, _ = targetNet(Variable(nextValidObs, volatile=True)).max(1)
-        expectedQ.masked_scatter_(notDoneTensor, targetQValid)
+        targetQValid, _ = targetNet(nextValidObs).max(1)
+        expectedQ[notDoneTensor] = targetQValid
         #
         # Calculate the belman error.
         expectedQ.volatile = False
@@ -177,30 +201,21 @@ def learn(env,
         return trainQ, expectedQ
     ######
 
-    # construct optimization op (with gradient clipping)
-                    # train_fn = minimize_and_clip(optimizer, total_error,
-                    #              var_list=q_func_vars, clip_val=grad_norm_clipping)
-
-                    # # update_target_fn will be called periodically to copy Q network to target Q network
-                    # update_target_fn = []
-                    # for var, var_target in zip(sorted(q_func_vars,        key=lambda v: v.name),
-                    #                            sorted(target_q_func_vars, key=lambda v: v.name)):
-                    #     update_target_fn.append(var_target.assign(var))
-                    # update_target_fn = tf.group(*update_target_fn)
-
     # construct the replay buffer
     replay_buffer = ReplayBuffer(replay_buffer_size, frame_history_len)
 
     ###############
     # RUN ENV     #
     ###############
-\    num_param_updates = 0
+    num_param_updates = 0
     mean_episode_reward      = -float('nan')
     best_mean_episode_reward = -float('inf')
     last_obs = env.reset()
     LOG_EVERY_N_STEPS = 10000
+    PROGRESS_UPDATE_FREQ = 100
     trainQ_func = q_func
     targetQ_func = copy.deepcopy(trainQ_func).eval()
+    runningLoss = 0
     #
     # Send networks to CUDA.
     if use_cuda:
@@ -208,12 +223,11 @@ def learn(env,
         targetQ_func.cuda()
     #
     # Training loop.
+    pbar = None
     for t in itertools.count():
-        pass
         ### 1. Check stopping criterion
         if stopping_criterion is not None and stopping_criterion(env, t):
             break
-
         ### 2. Step the env and store the transition
         # At this point, "last_obs" contains the latest observation that was
         # recorded from the simulator. Here, your code needs to store this
@@ -251,15 +265,15 @@ def learn(env,
         #
         # Epsilon greedy exploration.
         action = None
-        if random.random() < exploration.value(t):
-            action = random.randint(0, nAct - 1)
+        if random.random() < exploration.value(t) or t < learning_starts:
+            action = np.random.randint(0, nAct, dtype=np.int_)
         else:
             obs = toTensorImg(np.expand_dims(replay_buffer.encode_recent_observation(), axis=0))
             #
             # Forward through network.
             _, action = trainQ_func(Variable(obs, volatile=True)).max(1)
             # _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
-            action = action.data.cpu().numpy()
+            action = action.data.cpu().numpy().astype(np.int_)
 
         last_obs, reward, done, info = env.step(action)
         replay_buffer.store_effect(storeIndex, action, reward, done)
@@ -324,6 +338,9 @@ def learn(env,
             #
             # Calculate Huber loss.
             loss = F.smooth_l1_loss(trainQ, targetQ)
+            runningLoss += loss.data[0]
+            # 
+            # Optimize the model.
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
@@ -337,7 +354,6 @@ def learn(env,
                 targetQ_func.eval()
                 if use_cuda:
                     targetQ_func.cuda()
-
 
         ### 4. Log progress
         episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
@@ -354,3 +370,18 @@ def learn(env,
             print("learning_rate_schedule %f" % lr_scheduler.value(t))
             print("learning_rate ", lr_schedule.get_lr())
             sys.stdout.flush()
+            if pbar is not None:
+                pbar.close()
+            pbar = tqdm(total=LOG_EVERY_N_STEPS)
+            summary = {
+                'Mean reward (100 episodes)': mean_episode_reward,
+                'Best mean reward': best_mean_episode_reward,
+                'Episodes': len(episode_rewards),
+                'Learning rate': lr_schedule.get_lr()[0],
+                'Train loss': runningLoss / LOG_EVERY_N_STEPS,
+            }
+            logEpoch(logger, trainQ_func, summary, t)
+            runningLoss = 0
+        if t % PROGRESS_UPDATE_FREQ == 0:
+            pbar.update(100)
+    closeLogger()
