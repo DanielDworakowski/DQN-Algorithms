@@ -41,7 +41,7 @@ def atari_learn(env, num_timesteps):
     dqn.learn(
         env,
         q_func = deepMindModel.atari_model,
-        optimizer_spec = optimizer,
+        optimizer = optimizer,
         lr_schedule = schedule,
         exploration = exploration_schedule,
         stopping_criterion = stopping_criterion,
@@ -69,13 +69,11 @@ def configureEnv(env):
     expt_dir = '/tmp/hw3_vid_dir2/'
     env = wrappers.Monitor(env, osp.join(expt_dir, "gym"), force=True)
     env = wrap_deepmind(env)
-    print(env)
     return env
 
 def main():
 
     # Run training 
-    specs = gym.envs.registry
     env = gym.make('PongNoFrameskip-v0')
     setRandomSeeds(0, env)
     env = configureEnv(env)

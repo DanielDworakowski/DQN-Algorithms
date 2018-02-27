@@ -5,17 +5,27 @@ import itertools
 import gym.spaces
 import numpy as np
 from dqn_utils import *
+import torch.nn.functional as F
 from collections import namedtuple
 from torch.autograd import Variable
 import torchvision.transforms as transforms
 
+
 use_cuda = torch.cuda.is_available()
-toTensorImg = transforms.ToTensor()
-toTensor = torch.from_numpy
+FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
+ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
+
+def cpuTensorImg(x):
+    return torch.from_numpy(x.transpose((0,3,1,2))).type(FloatTensor).div_(255)
+def cpuTensor(x):
+    return torch.from_numpy(x)
+toTensorImg = cpuTensorImg
+toTensor = cpuTensor
 if use_cuda:
     def cudaTensorImg(x):
         print('May need to reorder dimensions.')
-        ret = torch.from_numpy(x).cuda(async=True).div_(255)
+        ret = torch.from_numpy(x.transpose((0,3,1,2))).cuda(async=True).type(FloatTensor).div_(255)
         return ret
     def cudaTensor(x):
         ret = torch.from_numpy(x).cuda(async=True)
@@ -23,15 +33,11 @@ if use_cuda:
     toTensorImg = cudaTensorImg
     toTensor = cudaTensor
 
-FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
-LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
-ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
-
 OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs", "lr_schedule"])
 
 def learn(env,
           q_func,
-          optimizer_spec,
+          optimizer,
           lr_schedule,
           exploration=LinearSchedule(1000000, 0.1),
           stopping_criterion=None,
@@ -145,26 +151,26 @@ def learn(env,
     # Older versions of TensorFlow may require using "VARIABLES" instead of "GLOBAL_VARIABLES"
     ######
     
-    nextBatchVect = toTensor(np.zeros((batch_size, 1)))
+    nextBatchVect = toTensor(np.zeros((batch_size), dtype=np.float32))
     def bellmanError(trainNet, targetNet, samples, gamma):
         obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = samples
         # 
         # Convert everything to be tensors, send to the GPU as needed.
         obs = toTensorImg(obs_batch)
-        act = toTensor(act_batch)
+        act = toTensor(act_batch.astype(np.int_))
         rew = Variable(toTensor(rew_batch), volatile=True)
-        notDoneMask = (done_mask == False)
+        notDoneMask = (done_mask == False).astype(np.uint8)
         nextValidObs = next_obs_batch[notDoneMask]
         nextValidObs = toTensorImg(nextValidObs)
         notDoneTensor = toTensor(notDoneMask)
         # 
         # Forward through both networks. 
-        trainQ = trainNet(Variable(obs)).index_select(0, act)
+        trainQ = torch.gather(trainNet(Variable(obs)), 1, Variable(act).unsqueeze_(1))
         # 
         # Not all have a next observation -> some finished. 
-        targetQ = targetNet(Variable(nextValidObs, volatile=True)).max(dim=0)
+        targetQ, _ = targetNet(Variable(nextValidObs, volatile=True)).max(1)
         nextBatchVect.zero_()
-        nextBatchVect.masked_scatter_(notDoneTensor, targetQ)
+        nextBatchVect.masked_scatter_(notDoneTensor, targetQ.data)
         # 
         # Calculate the belman error.
         expectedQ = targetQ * gamma + rew
@@ -241,12 +247,15 @@ def learn(env,
         # Epsilon greedy exploration.
         action = None
         if random.random() < exploration.value(t):
-            action = random.randint(0, nAct)
+            action = random.randint(0, nAct - 1)
         else:
-            obs = toTensorImg(replay_buffer.encode_recent_observation())
+            obs = toTensorImg(np.expand_dims(replay_buffer.encode_recent_observation(), axis=0))
             # 
             # Forward through network. 
-            action = torch.argMax(targetQ_func(obs))
+            inter = targetQ_func(Variable(obs, volatile=True))
+            _, action = inter.max(1)
+            action = action.data.numpy()
+
         last_obs, reward, done, info = env.step(action)
         replay_buffer.store_effect(storeIndex, action, reward, done)
         # 
@@ -306,7 +315,7 @@ def learn(env,
             sample = replay_buffer.sample(batch_size)
             # 
             # Train the model
-            trainQ, targetQ = bellmanError(q_func, targetQ_func, sample, gamma)
+            trainQ, targetQ = bellmanError(trainQ_func, targetQ_func, sample, gamma)
             # 
             # Calculate Huber loss. 
             optimizer.zero_grad()
