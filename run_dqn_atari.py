@@ -86,14 +86,14 @@ def configureEnv(env):
 
 def main():
     args = getInputArgs()
-    # 
+    #
     # Environment config
     env = gym.make('PongNoFrameskip-v0')
     setRandomSeeds(0, env)
     env = configureEnv(env)
-    # 
+    #
     # The learning fn.
-    atari_learn(env, num_timesteps=1e7, args=args)
+    atari_learn(env, num_timesteps=2e7, args=args)
 
 if __name__ == "__main__":
     main()

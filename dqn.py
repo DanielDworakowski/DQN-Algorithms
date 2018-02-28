@@ -11,14 +11,14 @@ from collections import namedtuple
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
 import torchvision.transforms as transforms
-# 
+#
 # Configuration.
 def getTensorConfiguration():
     use_cuda = torch.cuda.is_available()
     FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
     LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
     ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
-    # 
+    #
     # Default transforms.
     def cpuTensorImg(x):
         return torch.from_numpy(x.transpose((0,3,1,2))).type(FloatTensor).div_(255)
@@ -26,7 +26,7 @@ def getTensorConfiguration():
         return torch.from_numpy(x)
     toTensorImg = cpuTensorImg
     toTensor = cpuTensor
-    # 
+    #
     # Cuda transforms.
     if use_cuda:
         def cudaTensorImg(x):
@@ -38,7 +38,7 @@ def getTensorConfiguration():
         toTensorImg = cudaTensorImg
         toTensor = cudaTensor
     return toTensorImg, toTensor, use_cuda
-# 
+#
 # Visualize a batch.
 def visobs(obs):
     from PIL import Image
@@ -49,7 +49,7 @@ def visobs(obs):
             img.show()
         if i == 5:
             sys.exit(0)
-# 
+#
 # Logging configuration.
 def logEpochTensorboard(logger, model, epochSummary, t):
     # logger.add_scalar('%s_loss'%epochSummary['phase'], epochSummary['loss'], epochSummary['epoch'])
@@ -69,7 +69,7 @@ def closeTensorboard(logger):
 # When not using tensor board.
 def doNothing(logger = None, model = None, tmp = None, tmp1 = None):
     pass
-# 
+#
 # Training fn.
 def learn(env,
           q_func,
@@ -141,13 +141,13 @@ def learn(env,
     ###############
     # BUILD MODEL #
     ###############
-    # 
+    #
     # Environment information.
     nAct = env.action_space.n
-    # 
+    #
     # Information for tensor configuration.
     toTensorImg, toTensor, use_cuda = getTensorConfiguration()
-    # 
+    #
     # Logging setup.
     logger = None
     logEpoch = doNothing
@@ -339,11 +339,11 @@ def learn(env,
             # Calculate Huber loss.
             loss = F.smooth_l1_loss(trainQ, targetQ)
             runningLoss += loss.data[0]
-            # 
+            #
             # Optimize the model.
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
+            # torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
             optimizer.step()
             lr_schedule.step(t)
             num_param_updates += 1
