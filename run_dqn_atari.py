@@ -3,6 +3,7 @@ import gym
 import torch
 import random
 import argparse
+import Objectives
 import numpy as np
 import deepMindModel
 import os.path as osp
@@ -54,8 +55,8 @@ def atari_learn(env, num_timesteps, args):
         q_func = model,
         optimizer = optimizer,
         lr_schedule = schedule,
-        lr_scheduler = lr_schedule,
         exploration = exploration_schedule,
+        objective = Objectives.bellmanError,
         stopping_criterion = stopping_criterion,
         replay_buffer_size = 1000000,
         batch_size = 32,

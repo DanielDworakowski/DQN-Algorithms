@@ -3,7 +3,9 @@ import copy
 import random
 import itertools
 import gym.spaces
+import Objectives
 import numpy as np
+import TensorConfig
 from tqdm import tqdm
 from dqn_utils import *
 import torch.nn.functional as F
@@ -11,33 +13,7 @@ from collections import namedtuple
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
 import torchvision.transforms as transforms
-#
-# Configuration.
-def getTensorConfiguration():
-    use_cuda = torch.cuda.is_available()
-    FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
-    LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
-    ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
-    #
-    # Default transforms.
-    def cpuTensorImg(x):
-        return torch.from_numpy(x.transpose((0,3,1,2))).type(FloatTensor).div_(255)
-    def cpuTensor(x):
-        return torch.from_numpy(x)
-    toTensorImg = cpuTensorImg
-    toTensor = cpuTensor
-    #
-    # Cuda transforms.
-    if use_cuda:
-        def cudaTensorImg(x):
-            ret = torch.from_numpy(x.transpose((0,3,1,2))).contiguous().cuda(async=True).type(FloatTensor).div_(255)
-            return ret
-        def cudaTensor(x):
-            ret = torch.from_numpy(x).cuda(async=True)
-            return ret
-        toTensorImg = cudaTensorImg
-        toTensor = cudaTensor
-    return toTensorImg, toTensor, use_cuda
+
 #
 # Visualize a batch.
 def visobs(obs):
@@ -75,7 +51,7 @@ def learn(env,
           q_func,
           optimizer,
           lr_schedule,
-          lr_scheduler,
+          objective = Objectives.bellmanError,
           exploration=LinearSchedule(1000000, 0.1),
           stopping_criterion=None,
           replay_buffer_size=1000000,
@@ -138,7 +114,7 @@ def learn(env,
     nAct = env.action_space.n
     #
     # Information for tensor configuration.
-    toTensorImg, toTensor, use_cuda = getTensorConfiguration()
+    toTensorImg, toTensor, use_cuda = TensorConfig.getTensorConfiguration()
     #
     # Logging setup.
     logger = None
@@ -148,31 +124,6 @@ def learn(env,
         logger = SummaryWriter()
         logEpoch = logEpochTensorboard
         closeLogger = closeTensorboard
-
-    def bellmanError(trainNet, targetNet, samples, gamma):
-        obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = samples
-        #
-        # Convert everything to be tensors, send to the GPU as needed.
-        notDoneMask = (done_mask == False).astype(np.uint8)
-        nextValidObs = next_obs_batch.compress(notDoneMask, axis=0)
-        act = Variable(toTensor(act_batch))
-        rew = Variable(toTensor(rew_batch))
-        obs = Variable(toTensorImg(obs_batch))
-        expectedQ = Variable(toTensor(np.zeros((batch_size), dtype=np.float32)))
-        nextValidObs = Variable(toTensorImg(nextValidObs), volatile = True)
-        notDoneTensor = Variable(toTensor(notDoneMask))
-        #
-        # Forward through both networks.
-        trainQ = torch.gather(trainNet(obs), 1, act.unsqueeze_(1))
-        #
-        # Not all have a next observation -> some finished.
-        targetQValid, _ = targetNet(nextValidObs).max(1)
-        expectedQ[notDoneTensor] = targetQValid
-        #
-        # Calculate the belman error.
-        expectedQ.volatile = False
-        expectedQ = expectedQ.mul_(gamma) + rew
-        return trainQ, expectedQ
     # 
     # Construct support objects for learning. 
     num_param_updates = 0
@@ -229,8 +180,8 @@ def learn(env,
             # Sample from replay buffer.
             sample = replay_buffer.sample(batch_size)
             #
-            # Train the model
-            trainQ, targetQ = bellmanError(trainQ_func, targetQ_func, sample, gamma)
+            # Get the objective information (bellman eq).
+            trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, gamma)
             #
             # Calculate Huber loss.
             loss = F.smooth_l1_loss(trainQ, targetQ)
@@ -265,7 +216,6 @@ def learn(env,
             print("best mean reward %f" % best_mean_episode_reward)
             print("episodes %d" % len(episode_rewards))
             print("exploration %f" % exploration.value(t))
-            print("learning_rate_schedule %f" % lr_scheduler.value(t))
             print("learning_rate ", lr_schedule.get_lr())
             sys.stdout.flush()
             if pbar is not None:
