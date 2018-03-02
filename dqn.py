@@ -4,6 +4,7 @@ import random
 import itertools
 import gym.spaces
 import Objectives
+import Exploration
 import numpy as np
 import TensorConfig
 from tqdm import tqdm
@@ -13,7 +14,6 @@ from collections import namedtuple
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
 import torchvision.transforms as transforms
-
 #
 # Visualize a batch.
 def visobs(obs):
@@ -51,7 +51,6 @@ def learn(env,
           q_func,
           optimizer,
           lr_schedule,
-          objective = Objectives.bellmanError,
           exploration=LinearSchedule(1000000, 0.1),
           stopping_criterion=None,
           replay_buffer_size=1000000,
@@ -114,12 +113,15 @@ def learn(env,
     nAct = env.action_space.n
     #
     # Information for tensor configuration.
-    toTensorImg, toTensor, use_cuda = TensorConfig.getTensorConfiguration()
+    tensorCfg = TensorConfig.getTensorConfiguration()
+    toTensorImg, toTensor, use_cuda = tensorCfg
     #
     # Logging setup.
     logger = None
     logEpoch = doNothing
     closeLogger = doNothing
+    LOG_EVERY_N_STEPS = 10000
+    PROGRESS_UPDATE_FREQ = 100
     if useTB:
         logger = SummaryWriter()
         logEpoch = logEpochTensorboard
@@ -129,12 +131,11 @@ def learn(env,
     num_param_updates = 0
     mean_episode_reward = -float('nan')
     best_mean_episode_reward = -float('inf')
-    last_obs = env.reset()
-    LOG_EVERY_N_STEPS = 10000
-    PROGRESS_UPDATE_FREQ = 100
     trainQ_func = q_func
     targetQ_func = copy.deepcopy(trainQ_func).eval()
     replay_buffer = ReplayBuffer(replay_buffer_size, frame_history_len)
+    explorer = Exploration.EpsilonGreedy(exploration, tensorCfg, replay_buffer, env)
+    objective = Objectives.Objective(tensorCfg)
     runningLoss = 0
     #
     # Send networks to CUDA.
@@ -149,33 +150,12 @@ def learn(env,
         # Check if we are done. 
         if stopping_criterion is not None and stopping_criterion(env, t):
             break
-        #
-        # Store the latest frame in the replay buffer.
-        storeIndex = replay_buffer.store_frame(last_obs)
-        #
-        # Epsilon greedy exploration.
-        action = None
-        if random.random() < exploration.value(t) or t < learning_starts:
-            action = np.random.randint(0, nAct, dtype=np.int_)
-        else:
-            obs = toTensorImg(np.expand_dims(replay_buffer.encode_recent_observation(), axis=0))
-            #
-            # Forward through network.
-            _, action = trainQ_func(Variable(obs, volatile=True)).max(1)
-            # _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
-            action = action.data.cpu().numpy().astype(np.int_)
-
-        last_obs, reward, done, info = env.step(action)
-        replay_buffer.store_effect(storeIndex, action, reward, done)
-        #
-        # Reset as needed.
-        if done:
-            last_obs = env.reset()
+        # 
+        # Exploration. 
+        explorer.explore(t, trainQ_func)
         # 
         # Learning gating.
-        if (t > learning_starts and
-                t % learning_freq == 0 and
-                replay_buffer.can_sample(batch_size)):
+        if (t > learning_starts and t % learning_freq == 0 and replay_buffer.can_sample(batch_size)):
             #
             # Sample from replay buffer.
             sample = replay_buffer.sample(batch_size)

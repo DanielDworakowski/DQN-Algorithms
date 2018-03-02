@@ -56,7 +56,6 @@ def atari_learn(env, num_timesteps, args):
         optimizer = optimizer,
         lr_schedule = schedule,
         exploration = exploration_schedule,
-        objective = Objectives.bellmanError,
         stopping_criterion = stopping_criterion,
         replay_buffer_size = 1000000,
         batch_size = 32,
