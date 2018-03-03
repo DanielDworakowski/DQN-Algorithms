@@ -5,6 +5,8 @@ import random
 import argparse
 import Objectives
 import numpy as np
+import Exploration
+import TensorConfig
 import deepMindModel
 import os.path as osp
 from dqn_utils import *
@@ -15,11 +17,13 @@ from atari_wrappers import *
 def getInputArgs():
     parser = argparse.ArgumentParser('Configuration options.')
     parser.add_argument('--useTB', dest='useTB', default=False, action='store_true', help='Whether or not to log to Tesnor board.')
+    parser.add_argument('--replaySize', dest='replaySize', default=1000000, help='Whether or not to log to Tesnor board.')
+    parser.add_argument('--frame_history_len', dest='frameHistLen', default=4, help='Whether or not to log to Tesnor board.')
 
     args = parser.parse_args()
     return args
 
-def atari_learn(env, num_timesteps, args):
+def atari_learn(num_timesteps, args):
     # This is just a rough estimate
     num_iterations = float(num_timesteps) / 4.0
 
@@ -30,70 +34,75 @@ def atari_learn(env, num_timesteps, args):
                                          (num_iterations / 2,  5e-5 * lr_multiplier),
                                     ],
                                     outside_value=5e-5 * lr_multiplier)
-
-    model = deepMindModel.atari_model(env.action_space.n)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr_multiplier, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
-    def sched(epoch):
-        return lr_schedule.value(epoch)
-    # schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda epoch: lr_schedule.value(epoch))
-    schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = sched)
-
-    def stopping_criterion(env, t):
-        # notice that here t is the number of steps of the wrapped env,
-        # which is different from the number of steps in the underlying env
-        return get_wrapper_by_name(env, "Monitor").get_total_steps() >= num_timesteps
-
-    exploration_schedule = PiecewiseSchedule(
+    explorationSched = PiecewiseSchedule(
         [
             (0, 1.0),
             (1e6, 0.1),
             (num_iterations / 2, 0.01),
         ], outside_value=0.01)
-
+    #
+    # Environment config
+    seed = 0
+    setRandomSeeds(seed)
+    replay_buffer = ReplayBuffer(args.replaySize, args.frameHistLen)
+    tensorCfg = TensorConfig.getTensorConfiguration()
+    env = configureEnv(seed)
+    model = deepMindModel.atari_model(env.action_space.n)
+    # explorer = Exploration.EpsilonGreedy(explorationSched, tensorCfg, replay_buffer, env, model)
+    parallelCfg = Exploration.ExploreParallelCfg()
+    parallelCfg.envCfg = configureEnv
+    parallelCfg.model = model
+    parallelCfg.exploreSched = explorationSched
+    parallelCfg.tensorCfg = tensorCfg
+    parallelCfg.numFramesInBuffer = args.replaySize
+    explorer = Exploration.ParallelExplorer(parallelCfg)
+    # 
+    # Create the model.
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr_multiplier, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
+    # 
+    # Exploration scheduler.
+    def sched(epoch):
+        return lr_schedule.value(epoch)
+    schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = sched)
+    # 
+    # Learn.
     dqn.learn(
         env,
         q_func = model,
         optimizer = optimizer,
         lr_schedule = schedule,
-        exploration = exploration_schedule,
-        stopping_criterion = stopping_criterion,
-        replay_buffer_size = 1000000,
+        explorer = explorer,
+        tensorCfg = tensorCfg,
         batch_size = 32,
         gamma = 0.99,
         learning_starts = 50000,
         learning_freq = 4,
-        frame_history_len = 4,
         target_update_freq = 10000,
         grad_norm_clipping = 10,
         useTB = args.useTB
     )
     env.close()
 
-def setRandomSeeds(seed, env):
+def setRandomSeeds(seed):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-    env.seed(seed)
 
-def configureEnv(env):
-
-    expt_dir = '/tmp/hw3_vid_dir2/'
+def configureEnv(seed, id='dqn'):
+    expt_dir = '/tmp/%s/'%id
+    env = gym.make('PongNoFrameskip-v0')
     env = wrappers.Monitor(env, osp.join(expt_dir, "gym"), force=True)
     env = wrap_deepmind(env)
+    env.seed(seed)
     return env
 
 def main():
     args = getInputArgs()
     #
-    # Environment config
-    env = gym.make('PongNoFrameskip-v0')
-    setRandomSeeds(0, env)
-    env = configureEnv(env)
-    #
     # The learning fn.
-    atari_learn(env, num_timesteps=2e7, args=args)
+    atari_learn(num_timesteps=2e7, args=args)
 
 if __name__ == "__main__":
     main()
