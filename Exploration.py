@@ -1,11 +1,10 @@
-import random 
+import random
 import numpy as np
 from dqn_utils import ReplayBuffer
 from torch.autograd import Variable
 from dqn_utils import get_wrapper_by_name
-from torch.multiprocessing import Process, Pipe, Condition
-
-# 
+import torch.multiprocessing as mp
+#
 # When to stop
 def stopping_criterion(env):
     # notice that here t is the number of steps of the wrapped env,
@@ -41,8 +40,8 @@ class EpsilonGreedy(object):
             _, action = self.model(Variable(obs, volatile=True)).max(1)
             # _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
             action = action.data.cpu().numpy().astype(np.int_)
-        # 
-        # Step and save transition. 
+        #
+        # Step and save transition.
         self.last_obs, reward, done, info = self.env.step(action)
         self.replay_buffer.store_effect(storeIndex, action, reward, done)
         #
@@ -78,7 +77,7 @@ class ExploreParallelCfg(object):
     numFramesInBuffer = 1
     maxSteps = 2e7
 
-class ExploreProcess(Process):
+class ExploreProcess(mp.Process):
 
     def __init__(self, coms, cfg, seed, name):
         super(ExploreProcess, self).__init__()
@@ -91,13 +90,18 @@ class ExploreProcess(Process):
 
     def run(self):
         while True:
-            step = self.com.recv()
+            step = self.com.get()
             self.explorer.explore(step)
 
 class ParallelExplorer(object):
 
     def __init__(self, cfg):
         cfg.model.share_memory()
+        #
+        # This must be set in the main.
+        # mp.set_start_method('forkserver')
+        ctx = mp.get_context('forkserver')
+        self.manager = ctx.Manager()
         self.processes = []
         self.send = []
         self.curThread = 0
@@ -108,19 +112,23 @@ class ParallelExplorer(object):
         self.exploreSched = cfg.exploreSched
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
-            sendP, envEnd = Pipe()
-            explorer = ExploreProcess(envEnd, cfg, idx, idx)
+            sendP = self.manager.Queue()
+            print('1')
+            explorer = ExploreProcess(sendP, cfg, idx, idx)
+            print('2')
             explorer.start()
+            print('3')
             self.processes.append(explorer)
+            print('4')
             self.send.append(sendP)
 
     def explore(self, curStep, nStep):
-        # 
-        # Iterate and get n more examples in each of the threads. 
+        #
+        # Iterate and get n more examples in each of the threads.
         for idx in range(nStep):
-            # 
+            #
             # Notify a thread that it should do work.
-            self.send[self.curThread].send(curStep)
+            self.send[self.curThread].put(curStep)
             self.curThread = (self.curThread + 1) % self.nThreads
             curStep += 1
         self.totSteps += nStep

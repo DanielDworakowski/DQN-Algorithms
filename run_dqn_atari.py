@@ -12,6 +12,7 @@ import os.path as osp
 from dqn_utils import *
 from gym import wrappers
 from atari_wrappers import *
+import multiprocessing as mp
 #
 # Parse the input arguments.
 def getInputArgs():
@@ -56,15 +57,15 @@ def atari_learn(num_timesteps, args):
     parallelCfg.tensorCfg = tensorCfg
     parallelCfg.numFramesInBuffer = args.replaySize
     explorer = Exploration.ParallelExplorer(parallelCfg)
-    # 
+    #
     # Create the model.
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_multiplier, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
-    # 
+    #
     # Exploration scheduler.
     def sched(epoch):
         return lr_schedule.value(epoch)
     schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = sched)
-    # 
+    #
     # Learn.
     dqn.learn(
         env,
@@ -105,4 +106,5 @@ def main():
     atari_learn(num_timesteps=2e7, args=args)
 
 if __name__ == "__main__":
+    # mp.set_start_method('forkserver')
     main()
