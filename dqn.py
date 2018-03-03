@@ -75,13 +75,13 @@ def learn(env,
     logEpoch = doNothing
     closeLogger = doNothing
     LOG_EVERY_N_STEPS = 10000
-    PROGRESS_UPDATE_FREQ = 100 
+    PROGRESS_UPDATE_FREQ = 100
     if useTB:
         logger = SummaryWriter()
         logEpoch = logEpochTensorboard
         closeLogger = closeTensorboard
-    # 
-    # Construct support objects for learning. 
+    #
+    # Construct support objects for learning.
     num_param_updates = 0
     mean_episode_reward = -float('nan')
     best_mean_episode_reward = -float('inf')
@@ -98,15 +98,15 @@ def learn(env,
     # Training loop.
     pbar = None
     for t in itertools.count():
-        # 
-        # Check if we are done. 
+        #
+        # Check if we are done.
         if explorer.shouldStop():
             break
-        # 
-        # Exploration. 
+        #
+        # Exploration.
         # explorer.explore(t, trainQ_func)
         explorer.explore(t, 4)
-        # 
+        #
         # Learning gating.
         if (explorer.numSteps() > learning_starts and t % learning_freq == 0 and explorer.can_sample(batch_size)):
             #
@@ -123,8 +123,8 @@ def learn(env,
             # Optimize the model.
             optimizer.zero_grad()
             loss.backward()
-            # 
-            # Clip the gradient. 
+            #
+            # Clip the gradient.
             # torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
             optimizer.step()
             lr_schedule.step(t)
@@ -136,28 +136,29 @@ def learn(env,
                 targetQ_func.eval()
                 if use_cuda:
                     targetQ_func.cuda()
-        # 
-        # Logging. 
-        episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
-        if len(episode_rewards) > 0:
-            mean_episode_reward = np.mean(episode_rewards[-100:])
-        if len(episode_rewards) > 100:
-            best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+        #
+        # Logging.
+        # episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
+        mean_episode_reward = explorer.getRewards()
+        best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+        # if len(episode_rewards) > 0:
+        #     mean_episode_reward = np.mean(episode_rewards[-100:])
+        # if len(episode_rewards) > 100:
+        #     best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
         if t % LOG_EVERY_N_STEPS == 0:
             print("Timestep %d" % (t,))
             print("mean reward (100 episodes) %f" % mean_episode_reward)
             print("best mean reward %f" % best_mean_episode_reward)
-            print("episodes %d" % len(episode_rewards))
-            print("exploration %f" % explorer.epsilon(t))
+            print("episodes %d" % explorer.getNumEps())
             print("learning_rate ", lr_schedule.get_lr())
-            sys.stdout.flush()
             if pbar is not None:
                 pbar.close()
+            sys.stdout.flush()
             pbar = tqdm(total=LOG_EVERY_N_STEPS * explorer.stepSize())
             summary = {
                 'Mean reward (100 episodes)': mean_episode_reward,
                 'Best mean reward': best_mean_episode_reward,
-                'Episodes': len(episode_rewards),
+                'Episodes': explorer.getNumEps(),
                 'Learning rate': lr_schedule.get_lr()[0],
                 'Train loss': runningLoss / LOG_EVERY_N_STEPS,
             }
@@ -165,6 +166,6 @@ def learn(env,
             runningLoss = 0
         if t % PROGRESS_UPDATE_FREQ == 0:
             pbar.update(PROGRESS_UPDATE_FREQ * explorer.stepSize())
-    # 
+    #
     # Close logging (TB))
     closeLogger()
