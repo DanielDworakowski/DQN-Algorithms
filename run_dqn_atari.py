@@ -1,18 +1,11 @@
-import dqn
-import gym
-import torch
-import random
 import argparse
-import Objectives
-import numpy as np
-import Exploration
-import TensorConfig
-import deepMindModel
+import ConfigureEnv
 import os.path as osp
 from dqn_utils import *
 from gym import wrappers
+from ConfigureEnv import *
 from atari_wrappers import *
-import multiprocessing as mp
+import torch.multiprocessing as mp
 #
 # Parse the input arguments.
 def getInputArgs():
@@ -25,6 +18,16 @@ def getInputArgs():
     return args
 
 def atari_learn(num_timesteps, args):
+    import dqn
+    import gym
+    import torch
+    import random
+    import Objectives
+    import numpy as np
+    import Exploration
+    import TensorConfig
+    import deepMindModel
+    #
     # This is just a rough estimate
     num_iterations = float(num_timesteps) / 4.0
 
@@ -44,19 +47,18 @@ def atari_learn(num_timesteps, args):
     #
     # Environment config
     seed = 0
-    setRandomSeeds(seed)
     replay_buffer = ReplayBuffer(args.replaySize, args.frameHistLen)
     tensorCfg = TensorConfig.getTensorConfiguration()
     env = configureEnv(seed)
     model = deepMindModel.atari_model(env.action_space.n)
-    # explorer = Exploration.EpsilonGreedy(explorationSched, tensorCfg, replay_buffer, env, model)
+    # explorer = Exploration.EpsilonGreedy(explorationSched, TensorConfig.TensorConfig(), replay_buffer, env, model)
     parallelCfg = Exploration.ExploreParallelCfg()
-    parallelCfg.envCfg = configureEnv
     parallelCfg.model = model
     parallelCfg.exploreSched = explorationSched
-    parallelCfg.tensorCfg = tensorCfg
     parallelCfg.numFramesInBuffer = args.replaySize
     explorer = Exploration.ParallelExplorer(parallelCfg)
+    print('Set seeds!')
+    # setRandomSeeds(seed)
     #
     # Create the model.
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_multiplier, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
@@ -91,14 +93,6 @@ def setRandomSeeds(seed):
     np.random.seed(seed)
     random.seed(seed)
 
-def configureEnv(seed, id='dqn'):
-    expt_dir = '/tmp/%s/'%id
-    env = gym.make('PongNoFrameskip-v0')
-    env = wrappers.Monitor(env, osp.join(expt_dir, "gym"), force=True)
-    env = wrap_deepmind(env)
-    env.seed(seed)
-    return env
-
 def main():
     args = getInputArgs()
     #
@@ -106,5 +100,5 @@ def main():
     atari_learn(num_timesteps=2e7, args=args)
 
 if __name__ == "__main__":
-    # mp.set_start_method('forkserver')
+    mp.set_start_method('forkserver')
     main()

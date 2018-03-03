@@ -1,9 +1,11 @@
 import random
 import numpy as np
+import ConfigureEnv
+import TensorConfig
+import torch.multiprocessing as mp
 from dqn_utils import ReplayBuffer
 from torch.autograd import Variable
 from dqn_utils import get_wrapper_by_name
-import torch.multiprocessing as mp
 #
 # When to stop
 def stopping_criterion(env):
@@ -14,7 +16,7 @@ def stopping_criterion(env):
 class EpsilonGreedy(object):
 
     def __init__(self, exploreSched, tensorCfg, replay, env, model):
-        self.toTensorImg, self.toTensor, self.use_cuda = tensorCfg
+        self.toTensorImg, self.toTensor, self.use_cuda = tensorCfg.getConfig()
         self.replay_buffer = replay
         self.env = env
         self.model = model
@@ -22,6 +24,8 @@ class EpsilonGreedy(object):
         self.nAct = env.action_space.n
         self.exploreSched = exploreSched
         self.nSteps = 0
+        # if self.use_cuda:
+        #     model.cuda()
 
     def explore(self, t, *kwargs):
         #
@@ -68,11 +72,9 @@ class EpsilonGreedy(object):
         return 1
 
 class ExploreParallelCfg(object):
-    envCfg = None
     numEnv = 4
     model = None
     exploreSched = None
-    tensorCfg = None
     stackFrameLen = 4
     numFramesInBuffer = 1
     maxSteps = 2e7
@@ -81,14 +83,17 @@ class ExploreProcess(mp.Process):
 
     def __init__(self, coms, cfg, seed, name):
         super(ExploreProcess, self).__init__()
-        self.env = cfg.envCfg(seed, name)
         self.com = coms
         self.model = cfg.model
-        self.replay_buffer = ReplayBuffer(cfg.numFramesInBuffer // cfg.numEnv, cfg.stackFrameLen)
-        self.explorer = EpsilonGreedy(cfg.exploreSched, cfg.tensorCfg, self.replay_buffer, self.env, self.model)
+        self.seed = seed
+        self.name = str(name)
+        self.cfg = cfg
+        self.env = ConfigureEnv.configureEnv(self.seed, self.name)
+        self.replay_buffer = ReplayBuffer(self.cfg.numFramesInBuffer // self.cfg.numEnv, self.cfg.stackFrameLen)
         print('Initialized process ', name)
 
     def run(self):
+        self.explorer = EpsilonGreedy(self.cfg.exploreSched, TensorConfig.TensorConfig(), self.replay_buffer, self.env, self.model)
         while True:
             step = self.com.get()
             self.explorer.explore(step)
@@ -96,12 +101,13 @@ class ExploreProcess(mp.Process):
 class ParallelExplorer(object):
 
     def __init__(self, cfg):
+        cfg.model.cuda()
         cfg.model.share_memory()
         #
         # This must be set in the main.
         # mp.set_start_method('forkserver')
-        ctx = mp.get_context('forkserver')
-        self.manager = ctx.Manager()
+        # ctx = mp.get_context('forkserver')
+        # self.manager = ctx.Manager()
         self.processes = []
         self.send = []
         self.curThread = 0
@@ -110,16 +116,13 @@ class ParallelExplorer(object):
         self.totSteps = 0
         self.maxBuffers = cfg.numFramesInBuffer
         self.exploreSched = cfg.exploreSched
+        # cfg.model.cuda()
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
-            sendP = self.manager.Queue()
-            print('1')
+            sendP = mp.Queue()
             explorer = ExploreProcess(sendP, cfg, idx, idx)
-            print('2')
             explorer.start()
-            print('3')
             self.processes.append(explorer)
-            print('4')
             self.send.append(sendP)
 
     def explore(self, curStep, nStep):
