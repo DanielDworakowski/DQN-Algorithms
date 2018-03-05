@@ -105,7 +105,7 @@ def learn(env,
         #
         # Exploration.
         # explorer.explore(t, trainQ_func)
-        explorer.explore(t, 4)
+        explorer.explore(t, explorer.stepSize())
         #
         # Learning gating.
         if (explorer.numSteps() > learning_starts and t % learning_freq == 0 and explorer.can_sample(batch_size)):
@@ -132,7 +132,7 @@ def learn(env,
             #
             # Update the target network as needed (target_update_freq).
             if num_param_updates % target_update_freq == 0:
-                targetQ_func = copy.deepcopy(trainQ_func)
+                targetQ_func.load_state_dict(trainQ_func.state_dict())
                 targetQ_func.eval()
                 if use_cuda:
                     targetQ_func.cuda()
@@ -145,7 +145,7 @@ def learn(env,
         #     mean_episode_reward = np.mean(episode_rewards[-100:])
         # if len(episode_rewards) > 100:
         #     best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
-        if t % LOG_EVERY_N_STEPS == 0:
+        if t % (LOG_EVERY_N_STEPS // explorer.stepSize()) == 0:
             print("Timestep %d" % (t,))
             print("mean reward (100 episodes) %f" % mean_episode_reward)
             print("best mean reward %f" % best_mean_episode_reward)
@@ -154,7 +154,7 @@ def learn(env,
             if pbar is not None:
                 pbar.close()
             sys.stdout.flush()
-            pbar = tqdm(total=LOG_EVERY_N_STEPS * explorer.stepSize())
+            pbar = tqdm(total=LOG_EVERY_N_STEPS)
             summary = {
                 'Mean reward (100 episodes)': mean_episode_reward,
                 'Best mean reward': best_mean_episode_reward,

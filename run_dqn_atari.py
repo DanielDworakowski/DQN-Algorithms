@@ -51,14 +51,14 @@ def atari_learn(num_timesteps, args):
     tensorCfg = TensorConfig.getTensorConfiguration()
     env = configureEnv(seed)
     model = deepMindModel.atari_model(env.action_space.n)
-    # explorer = Exploration.EpsilonGreedy(explorationSched, TensorConfig.TensorConfig(), replay_buffer, env, model)
+    explorer = Exploration.EpsilonGreedy(explorationSched, TensorConfig.TensorConfig(), replay_buffer, env, model)
     parallelCfg = Exploration.ExploreParallelCfg()
     parallelCfg.model = model
     parallelCfg.exploreSched = explorationSched
     parallelCfg.numFramesInBuffer = args.replaySize
-    explorer = Exploration.ParallelExplorer(parallelCfg)
+    # explorer = Exploration.ParallelExplorer(parallelCfg)
     print('Set seeds!')
-    # setRandomSeeds(seed)
+    setRandomSeeds(seed)
     #
     # Create the model.
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_multiplier, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
@@ -78,7 +78,7 @@ def atari_learn(num_timesteps, args):
         tensorCfg = tensorCfg,
         batch_size = 32,
         gamma = 0.99,
-        learning_starts = 50000,
+        learning_starts = 50,
         learning_freq = 4,
         target_update_freq = 10000,
         grad_norm_clipping = 10,

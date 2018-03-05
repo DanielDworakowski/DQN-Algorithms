@@ -78,6 +78,9 @@ class EpsilonGreedy(object):
         # episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
         return np.mean(get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()[-100:])
 
+    def getNumEps(self):
+        return len(get_wrapper_by_name(self.env, "Monitor").get_episode_rewards())
+
 
 class ExploreParallelCfg(object):
     numEnv = 4
@@ -176,12 +179,27 @@ class ParallelExplorer(object):
         #
         # Ensure that all can sample.
         ret = True
-        for process in self.processes:
-            ret = ret and process.replay_buffer.can_sample(batchSize)
+        for buf in self.replayBuffers:
+            ret = ret and buf.can_sample(batchSize)
         return ret
 
     def sample(self, batchSize):
-        return self.processes[0].replay_buffer.sample(batchSize)
+        bufferSamples = batchSize // self.nThreads
+        extra = batchSize - self.nThreads * bufferSamples
+        extraBuff = np.zeros(self.nThreads, dtype=np.int8)
+        addList = np.random.choice(self.nThreads, replace=False)
+        extraBuff[addList] = 1
+        samplelist = []
+        for threadIdx in range(self.nThreads):
+            threadBatch = bufferSamples + extraBuff[threadIdx]
+            samplelist.append(self.replayBuffers[threadIdx].sample(threadBatch))
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = zip(*samplelist)
+        obs_batch = np.concatenate(obs_batch)
+        act_batch = np.concatenate(act_batch)
+        rew_batch = np.concatenate(rew_batch)
+        next_obs_batch = np.concatenate(next_obs_batch)
+        done_mask = np.concatenate(done_mask)
+        return obs_batch, act_batch, rew_batch, next_obs_batch, done_mask
 
     def epsilon(self, t):
         return self.exploreSched.value(t)
