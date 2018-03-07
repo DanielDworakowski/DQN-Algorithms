@@ -121,8 +121,6 @@ class ExploreProcess(mp.Process):
 class ParallelExplorer(object):
 
     def __init__(self, cfg):
-        cfg.model.cuda()
-        cfg.model.share_memory()
         #
         # This must be set in the main.
         # mp.set_start_method('forkserver')
