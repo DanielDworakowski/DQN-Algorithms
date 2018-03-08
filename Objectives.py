@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from torch.autograd import Variable
-# 
-# Bellman error objective, standard Q learning. 
+#
+# Bellman error objective, standard Q learning.
 class Objective(object):
 
     def __init__(self, tensorCfg):

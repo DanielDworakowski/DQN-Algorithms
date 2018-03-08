@@ -57,8 +57,6 @@ def atari_learn(num_timesteps, args):
     model = deepMindModel.atari_model(env.action_space.n)
     # explorer = Exploration.EpsilonGreedy(explorationSched, TensorConfig.TensorConfig(), replay_buffer, env, model)
     parallelCfg = Exploration.ExploreParallelCfg()
-    model.share_memory()
-    model.cuda()
     parallelCfg.model = model
     parallelCfg.exploreSched = explorationSched
     parallelCfg.numFramesInBuffer = args.replaySize
@@ -84,7 +82,7 @@ def atari_learn(num_timesteps, args):
         tensorCfg = tensorCfg,
         batch_size = 32,
         gamma = 0.99,
-        learning_starts = 50000,
+        learning_starts = 500,
         learning_freq = 4,
         target_update_freq = 10000,
         grad_norm_clipping = 10,

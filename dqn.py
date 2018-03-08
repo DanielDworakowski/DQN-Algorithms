@@ -110,41 +110,40 @@ def learn(env,
         # Learning gating.
         if (explorer.numSteps() > learning_starts and t % learning_freq == 0 and explorer.can_sample(batch_size)):
             #
-            # Sample from replay buffer.
-            sample = explorer.sample(batch_size)
-            #
-            # Get the objective information (bellman eq).
-            trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, gamma)
-            #
-            # Calculate Huber loss.
-            loss = F.smooth_l1_loss(trainQ, targetQ)
-            runningLoss += loss.data[0]
-            #
-            # Optimize the model.
-            optimizer.zero_grad()
-            loss.backward()
-            #
-            # Clip the gradient.
-            # torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
-            optimizer.step()
-            lr_schedule.step(t)
-            num_param_updates += 1
-            #
-            # Update the target network as needed (target_update_freq).
-            if num_param_updates % target_update_freq == 0:
-                targetQ_func.load_state_dict(trainQ_func.state_dict())
-                targetQ_func.eval()
-                if use_cuda:
-                    targetQ_func.cuda()
+            # Update as many times as we would have updated if everything was serial.
+            # for i in range(explorer.stepSize()):
+            for i in range(1):
+                #
+                # Sample from replay buffer.
+                sample = explorer.sample(batch_size * explorer.stepSize())
+                #
+                # Get the objective information (bellman eq).
+                trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, gamma)
+                #
+                # Calculate Huber loss.
+                loss = F.smooth_l1_loss(trainQ, targetQ)
+                runningLoss += loss.data[0]
+                #
+                # Optimize the model.
+                optimizer.zero_grad()
+                loss.backward()
+                #
+                # Clip the gradient.
+                # torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
+                optimizer.step()
+                lr_schedule.step(t)
+                num_param_updates += 1
+                #
+                # Update the target network as needed (target_update_freq).
+                if num_param_updates % target_update_freq == 0:
+                    targetQ_func.load_state_dict(trainQ_func.state_dict())
+                    targetQ_func.eval()
+                    if use_cuda:
+                        targetQ_func.cuda()
         #
         # Logging.
-        # episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
         mean_episode_reward = explorer.getRewards()
         best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
-        # if len(episode_rewards) > 0:
-        #     mean_episode_reward = np.mean(episode_rewards[-100:])
-        # if len(episode_rewards) > 100:
-        #     best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
         if t % (LOG_EVERY_N_STEPS // explorer.stepSize()) == 0:
             print("Timestep %d" % (t,))
             print("mean reward (100 episodes) %f" % mean_episode_reward)

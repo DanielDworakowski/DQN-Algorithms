@@ -1,3 +1,4 @@
+import os
 import torch
 import random
 import numpy as np
@@ -102,21 +103,43 @@ class ExploreProcess(mp.Process):
         self.cfg = cfg
         self.env = ConfigureEnv.configureEnv(self.seed, 'dqn_' + str(procId))
         # self.replay_buffer = ReplayBuffer(self.cfg.stackFrameLen, self.cfg.stackFrameLen)
-        # frameSize = self.env.observation_space.shape
-        # self.stackedFrames = torch.ByteTensor(1, frameSize[0], frameSize[1], frameSize[2] * self.cfg.stackFrameLen)
-        # self.stackedFrames.storage().share_memory_()
+        frameSize = self.env.observation_space.shape
+        self.retFrame = torch.ByteTensor(frameSize[0], frameSize[1], frameSize[2])
+        self.reward = torch.FloatTensor(1)
+        self.done = torch.ByteTensor(1)
+        self.action = torch.ByteTensor(1)
+        self.meanRewards = torch.FloatTensor(1)
+        self.nEps = torch.LongTensor(1)
+        self.retFrame.storage().share_memory_()
+        self.reward.storage().share_memory_()
+        self.done.storage().share_memory_()
+        self.action.storage().share_memory_()
+        self.meanRewards.storage().share_memory_()
+        self.nEps.storage().share_memory_()
+        self.notifier = mp.BoundedSemaphore(1)
+        self.notifier.acquire()
         #
         # Shared memory to transfer the action commands.
         self.actionVec = actionVec
         print('Initialized process ', procId)
 
     def run(self):
+        print('Process: %d has PID: %d'%(self.procId, os.getpid()))
         #
         # For the first run, just setup a random action.
         self.lastObs = self.env.reset()
         obs, reward, done, info = self.env.step(0)
-        self.com.send((self.lastObs, reward, done, info, 0, 0, 0))
+        self.retFrame.copy_(torch.from_numpy(obs))
+        # self.com.send(( reward, done, 0, 0, 0))
         self.lastObs = obs
+        self.retFrame.copy_(torch.from_numpy(obs))
+        self.reward.copy_(torch.from_numpy(np.atleast_1d(reward)))
+        self.done.copy_(torch.from_numpy(np.atleast_1d(done).astype(np.uint8)))
+        self.action.copy_(torch.from_numpy(np.atleast_1d(0)))
+        self.meanRewards.copy_(torch.from_numpy(np.atleast_1d(0)))
+        #
+        # Notify that remembory is ready.
+        self.com.send(0)
         #
         # Loop and do work.
         while True:
@@ -135,8 +158,16 @@ class ExploreProcess(mp.Process):
             mean_episode_reward = 0
             if (len(lastRew) > 0):
                 mean_episode_reward = np.mean(lastRew[-100:])
-            self.com.send((self.lastObs, reward, done, info, action, mean_episode_reward, len(lastRew)))
+            # self.com.send(( reward, done, action, mean_episode_reward, len(lastRew)))
             self.lastObs = obs
+            self.retFrame.copy_(torch.from_numpy(self.lastObs))
+            self.reward.copy_(torch.from_numpy(np.atleast_1d(reward)))
+            self.done.copy_(torch.from_numpy(np.atleast_1d(done).astype(np.uint8)))
+            self.action.copy_(torch.from_numpy(np.atleast_1d(action)))
+            self.meanRewards.copy_(torch.from_numpy(np.atleast_1d(mean_episode_reward)))
+            #
+            # Notify that remembory is ready.
+            self.com.send(0)
 
 class ParallelExplorer(object):
 
@@ -159,19 +190,21 @@ class ParallelExplorer(object):
         self.model = cfg.model
         self.actionVec = torch.LongTensor(self.nThreads)
         self.actionVec.storage().share_memory_()
-        self.threads = np.arange(self.nThreads, dtype=np.int_)
+        self.threads = np.atleast_1d(np.arange(self.nThreads, dtype=np.int_))
         self.toTensorImg, self.toTensor, self.use_cuda = TensorConfig.getTensorConfiguration()
         # cfg.model.cuda()
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
             sendP, subpipe = mp.Pipe()
             explorer = ExploreProcess(subpipe, cfg, idx, idx, self.actionVec)
+            explorer.daemon = True
             explorer.start()
             self.processes.append(explorer)
             self.comms.append(sendP)
             self.replayBuffers.append(ReplayBuffer(cfg.numFramesInBuffer // cfg.numEnv, cfg.stackFrameLen))
             self.followup.append(idx)
         self.nAct = self.processes[0].env.action_space.n
+        print('Parent PID: %d'%os.getpid())
 
     def __del__(self):
         for proc in self.processes:
@@ -186,10 +219,15 @@ class ParallelExplorer(object):
         # Gather the responses from each.
         for pipeIdx in self.followup:
             ret = self.comms[pipeIdx].recv()
-            obs, reward, done, info, action, meanReward, nEp = ret
+            # reward, done, action, meanReward, nEp = ret
+            reward = self.processes[pipeIdx].reward.clone().numpy()
+            done = self.processes[pipeIdx].done.clone().numpy().astype(np.bool)
+            action = self.processes[pipeIdx].action.clone().numpy()
+            meanReward = self.processes[pipeIdx].meanRewards.clone().numpy()
+            nEp = self.processes[pipeIdx].nEps.clone().numpy()
             self.meanRewards[pipeIdx] = meanReward
             self.numEps[pipeIdx] = nEp
-            storeIndex = self.replayBuffers[pipeIdx].store_frame(obs)
+            storeIndex = self.replayBuffers[pipeIdx].store_frame(self.processes[pipeIdx].retFrame.clone().numpy())
             self.replayBuffers[pipeIdx].store_effect(storeIndex, action, reward, done)
         #
         # We have finished following up.
@@ -201,10 +239,10 @@ class ParallelExplorer(object):
         #
         # Select each of the threads to use.
         thSelect = torch.from_numpy(np.random.choice(self.threads, nStep, replace=False))
-        exploration = torch.from_numpy(np.random.uniform(size=nStep))
+        exploration = np.atleast_1d(torch.from_numpy(np.random.uniform(size=nStep)))
         randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=nStep, dtype=np.int_))
         self.actionVec.copy_(randomActions)
-        runNetIdx = torch.from_numpy(self.threads[thSelect][exploration >= self.exploreSched.value(curStep)])
+        runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration >= self.exploreSched.value(curStep)])
         obsList = []
         #
         # Ensure that we actually even want to do anything.
@@ -217,7 +255,7 @@ class ParallelExplorer(object):
             # Forward through the network.
             obsStack = Variable(self.toTensorImg(np.array(obsList)), volatile=True)
             _, actions = self.model(obsStack).max(1)
-            self.actionVec.scatter_(0, runNetIdx, actions.data.cpu())
+            self.actionVec.scatter_(0, torch.from_numpy(runNetIdx), actions.data.cpu())
         #
         # Notify all workers.
         for idx in thSelect:
