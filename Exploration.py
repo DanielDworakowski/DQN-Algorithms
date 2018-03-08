@@ -84,7 +84,7 @@ class EpsilonGreedy(object):
 
 
 class ExploreParallelCfg(object):
-    numEnv = 10
+    numEnv = 4
     model = None
     exploreSched = None
     stackFrameLen = 4
@@ -116,8 +116,6 @@ class ExploreProcess(mp.Process):
         self.action.storage().share_memory_()
         self.meanRewards.storage().share_memory_()
         self.nEps.storage().share_memory_()
-        self.notifier = mp.BoundedSemaphore(1)
-        self.notifier.acquire()
         #
         # Shared memory to transfer the action commands.
         self.actionVec = actionVec
@@ -192,7 +190,7 @@ class ParallelExplorer(object):
         self.actionVec.storage().share_memory_()
         self.threads = np.atleast_1d(np.arange(self.nThreads, dtype=np.int_))
         self.toTensorImg, self.toTensor, self.use_cuda = TensorConfig.getTensorConfiguration()
-        # cfg.model.cuda()
+        self.cfg = cfg        
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
             sendP, subpipe = mp.Pipe()
@@ -204,6 +202,7 @@ class ParallelExplorer(object):
             self.replayBuffers.append(ReplayBuffer(cfg.numFramesInBuffer // cfg.numEnv, cfg.stackFrameLen))
             self.followup.append(idx)
         self.nAct = self.processes[0].env.action_space.n
+        self.imshape = self.processes[0].env.observation_space.shape
         print('Parent PID: %d'%os.getpid())
 
     def __del__(self):
@@ -242,19 +241,25 @@ class ParallelExplorer(object):
         exploration = np.atleast_1d(torch.from_numpy(np.random.uniform(size=nStep)))
         randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=nStep, dtype=np.int_))
         self.actionVec.copy_(randomActions)
-        runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration >= self.exploreSched.value(curStep)])
+        # runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration >= self.exploreSched.value(curStep)])
+        runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration < self.exploreSched.value(curStep)])
         obsList = []
         #
         # Ensure that we actually even want to do anything.
         if runNetIdx.shape[0] > 0:
             #
             # Build the batch of images.
-            for idx in runNetIdx:
-                obsList.append(self.replayBuffers[idx].encode_recent_observation())
+            preAllocated = np.empty((runNetIdx.shape[0], self.imshape[0], self.imshape[1], self.cfg.stackFrameLen), dtype=np.uint8)
+            for allocatedIdx, netIdx in enumerate(runNetIdx):
+                preAllocated[allocatedIdx, ...] = self.replayBuffers[netIdx].encode_recent_observation()
+                # obsList.append(self.replayBuffers[idx].encode_recent_observation())
             #
             # Forward through the network.
-            obsStack = Variable(self.toTensorImg(np.array(obsList)), volatile=True)
+            obsStack = Variable(self.toTensorImg(preAllocated), volatile=True)
+            mode = self.model.training
+            self.model.eval()
             _, actions = self.model(obsStack).max(1)
+            self.model.train(mode)
             self.actionVec.scatter_(0, torch.from_numpy(runNetIdx), actions.data.cpu())
         #
         # Notify all workers.

@@ -82,7 +82,7 @@ def atari_learn(num_timesteps, args):
         tensorCfg = tensorCfg,
         batch_size = 32,
         gamma = 0.99,
-        learning_starts = 500,
+        learning_starts = 50,
         learning_freq = 4,
         target_update_freq = 10000,
         grad_norm_clipping = 10,

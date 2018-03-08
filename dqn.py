@@ -98,6 +98,8 @@ def learn(env,
     # Training loop.
     pbar = None
     for t in itertools.count():
+        # if t == 200:
+        #     sys.exit(0)
         #
         # Check if we are done.
         if explorer.shouldStop():
@@ -115,7 +117,7 @@ def learn(env,
             for i in range(1):
                 #
                 # Sample from replay buffer.
-                sample = explorer.sample(batch_size * explorer.stepSize())
+                sample = explorer.sample(batch_size)
                 #
                 # Get the objective information (bellman eq).
                 trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, gamma)

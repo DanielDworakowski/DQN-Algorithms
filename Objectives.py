@@ -14,7 +14,10 @@ class Objective(object):
         #
         # Convert everything to be tensors, send to the GPU as needed.
         notDoneMask = (done_mask == False).astype(np.uint8)
-        nextValidObs = next_obs_batch.compress(notDoneMask, axis=0)
+        # nextValidObs = next_obs_batch.compress(notDoneMask, axis=0)
+        # self.gatherTensor.gather(dim=0, )
+        # nextValidObs = torch.index_select(torch.from_numpy(next_obs_batch), 0, torch.nonzero(torch.from_numpy(notDoneMask)).squeeze_())
+        nextValidObs = np.take(next_obs_batch, np.argwhere(notDoneMask).squeeze(), axis=0)
         act = Variable(self.toTensor(act_batch))
         rew = Variable(self.toTensor(rew_batch))
         obs = Variable(self.toTensorImg(obs_batch))
