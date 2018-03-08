@@ -105,7 +105,7 @@ def learn(env,
         #
         # Exploration.
         # explorer.explore(t, trainQ_func)
-        explorer.explore(t, explorer.stepSize())
+        explorer.explore(explorer.stepSize())
         #
         # Learning gating.
         if (explorer.numSteps() > learning_starts and t % learning_freq == 0 and explorer.can_sample(batch_size)):
@@ -150,6 +150,7 @@ def learn(env,
             print("mean reward (100 episodes) %f" % mean_episode_reward)
             print("best mean reward %f" % best_mean_episode_reward)
             print("episodes %d" % explorer.getNumEps())
+            print("Exploration %f" % explorer.epsilon())
             print("learning_rate ", lr_schedule.get_lr())
             if pbar is not None:
                 pbar.close()
@@ -160,6 +161,7 @@ def learn(env,
                 'Best mean reward': best_mean_episode_reward,
                 'Episodes': explorer.getNumEps(),
                 'Learning rate': lr_schedule.get_lr()[0],
+                'Exploration': explorer.epsilon(),
                 'Train loss': runningLoss / LOG_EVERY_N_STEPS,
             }
             logEpoch(logger, trainQ_func, summary, t)

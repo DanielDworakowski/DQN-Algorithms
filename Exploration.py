@@ -1,3 +1,4 @@
+import torch
 import random
 import numpy as np
 import ConfigureEnv
@@ -54,7 +55,6 @@ class EpsilonGreedy(object):
         storeIndex = self.replay_buffer.store_frame(self.lastObs)
         self.lastObs, reward, done, info, action = self.explore_nobuffer(t)
         self.replay_buffer.store_effect(storeIndex, action, reward, done)
-        return (self.lastObs, reward, done, info, action)
 
     def can_sample(self, batchSize):
         return self.replay_buffer.can_sample(batchSize)
@@ -62,8 +62,8 @@ class EpsilonGreedy(object):
     def sample(self, batchSize):
         return self.replay_buffer.sample(batchSize)
 
-    def epsilon(self, t):
-        return self.exploreSched.value(t)
+    def epsilon(self):
+        return self.exploreSched.value(self.nSteps)
 
     def shouldStop(self):
         return stopping_criterion(self.env) >= 2e7
@@ -83,7 +83,7 @@ class EpsilonGreedy(object):
 
 
 class ExploreParallelCfg(object):
-    numEnv = 4
+    numEnv = 10
     model = None
     exploreSched = None
     stackFrameLen = 4
@@ -92,26 +92,46 @@ class ExploreParallelCfg(object):
 
 class ExploreProcess(mp.Process):
 
-    def __init__(self, coms, cfg, seed, name):
+    def __init__(self, coms, cfg, seed, procId, actionVec):
         super(ExploreProcess, self).__init__()
         self.com = coms
         self.model = cfg.model
         self.seed = seed
-        self.name = str(name)
+        self.procId = procId
         self.lastObs = None
         self.cfg = cfg
-        self.env = ConfigureEnv.configureEnv(self.seed, self.name)
-        self.replay_buffer = ReplayBuffer(self.cfg.stackFrameLen, self.cfg.stackFrameLen)
-        print('Initialized process ', name)
+        self.env = ConfigureEnv.configureEnv(self.seed, 'dqn_' + str(procId))
+        # self.replay_buffer = ReplayBuffer(self.cfg.stackFrameLen, self.cfg.stackFrameLen)
+        # frameSize = self.env.observation_space.shape
+        # self.stackedFrames = torch.ByteTensor(1, frameSize[0], frameSize[1], frameSize[2] * self.cfg.stackFrameLen)
+        # self.stackedFrames.storage().share_memory_()
+        #
+        # Shared memory to transfer the action commands.
+        self.actionVec = actionVec
+        print('Initialized process ', procId)
 
     def run(self):
-        self.explorer = EpsilonGreedy(self.cfg.exploreSched, TensorConfig.TensorConfig(), self.replay_buffer, self.env, self.model)
-        self.lastObs = self.explorer.lastObs
+        #
+        # For the first run, just setup a random action.
+        self.lastObs = self.env.reset()
+        obs, reward, done, info = self.env.step(0)
+        self.com.send((self.lastObs, reward, done, info, 0, 0, 0))
+        self.lastObs = obs
+        #
+        # Loop and do work.
         while True:
+            #
+            # Wait for actions.
             step = self.com.recv()
-            ret = self.explorer.explore(step)
-            obs, reward, done, info, action = ret
-            lastRew = get_wrapper_by_name(self.explorer.env, "Monitor").get_episode_rewards()
+            action = self.actionVec.numpy().astype(np.int_)[self.procId]
+            obs, reward, done, info = self.env.step(action)
+            #
+            # Step and save transition.
+            if done:
+                obs = self.env.reset()
+            #
+            # Store effects.
+            lastRew = get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()
             mean_episode_reward = 0
             if (len(lastRew) > 0):
                 mean_episode_reward = np.mean(lastRew[-100:])
@@ -136,37 +156,73 @@ class ParallelExplorer(object):
         self.totSteps = 0
         self.maxBuffers = cfg.numFramesInBuffer
         self.exploreSched = cfg.exploreSched
+        self.model = cfg.model
+        self.actionVec = torch.LongTensor(self.nThreads)
+        self.actionVec.storage().share_memory_()
+        self.threads = np.arange(self.nThreads, dtype=np.int_)
+        self.toTensorImg, self.toTensor, self.use_cuda = TensorConfig.getTensorConfiguration()
         # cfg.model.cuda()
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
             sendP, subpipe = mp.Pipe()
-            explorer = ExploreProcess(subpipe, cfg, idx, idx)
+            explorer = ExploreProcess(subpipe, cfg, idx, idx, self.actionVec)
             explorer.start()
             self.processes.append(explorer)
             self.comms.append(sendP)
             self.replayBuffers.append(ReplayBuffer(cfg.numFramesInBuffer // cfg.numEnv, cfg.stackFrameLen))
+            self.followup.append(idx)
+        self.nAct = self.processes[0].env.action_space.n
 
-    def explore(self, curStep, nStep):
-        if curStep > 0:
-            for pipeIdx in self.followup:
-                ret = self.comms[pipeIdx].recv()
-                last_obs, reward, done, info, action, meanReward, nEp = ret
-                self.meanRewards[pipeIdx] = meanReward
-                self.numEps[pipeIdx] = nEp
-                storeIndex = self.replayBuffers[pipeIdx].store_frame(last_obs)
-                self.replayBuffers[pipeIdx].store_effect(storeIndex, action, reward, done)
+    def __del__(self):
+        for proc in self.processes:
+            proc.terminate()
+            proc.join()
+
+    def explore(self, nStep):
         #
-        # Iterate and get n more examples in each of the threads.
+        # Can only do at most nThreads steps at once.
+        assert nStep <= self.nThreads
+        #
+        # Gather the responses from each.
+        for pipeIdx in self.followup:
+            ret = self.comms[pipeIdx].recv()
+            obs, reward, done, info, action, meanReward, nEp = ret
+            self.meanRewards[pipeIdx] = meanReward
+            self.numEps[pipeIdx] = nEp
+            storeIndex = self.replayBuffers[pipeIdx].store_frame(obs)
+            self.replayBuffers[pipeIdx].store_effect(storeIndex, action, reward, done)
+        #
+        # We have finished following up.
         self.followup = []
-        for idx in range(nStep):
-            #
-            # Notify a thread that it should do work.
-            self.comms[self.curThread].send(curStep)
-            self.curThread = (self.curThread + 1) % self.nThreads
-            self.followup.append(self.curThread)
-            curStep += 1
+        #
+        # Keep track of the effective number of steps.
+        curStep = self.totSteps
         self.totSteps += nStep
-        self.nInBuffers = min(self.totSteps, self.maxBuffers)
+        #
+        # Select each of the threads to use.
+        thSelect = torch.from_numpy(np.random.choice(self.threads, nStep, replace=False))
+        exploration = torch.from_numpy(np.random.uniform(size=nStep))
+        randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=nStep, dtype=np.int_))
+        self.actionVec.copy_(randomActions)
+        runNetIdx = torch.from_numpy(self.threads[thSelect][exploration >= self.exploreSched.value(curStep)])
+        obsList = []
+        #
+        # Ensure that we actually even want to do anything.
+        if runNetIdx.shape[0] > 0:
+            #
+            # Build the batch of images.
+            for idx in runNetIdx:
+                obsList.append(self.replayBuffers[idx].encode_recent_observation())
+            #
+            # Forward through the network.
+            obsStack = Variable(self.toTensorImg(np.array(obsList)), volatile=True)
+            _, actions = self.model(obsStack).max(1)
+            self.actionVec.scatter_(0, runNetIdx, actions.data.cpu())
+        #
+        # Notify all workers.
+        for idx in thSelect:
+            self.comms[idx].send(curStep)
+            self.followup.append(idx)
 
     def close(self):
         for proc in self.processes:
@@ -199,8 +255,8 @@ class ParallelExplorer(object):
         done_mask = np.concatenate(done_mask)
         return obs_batch, act_batch, rew_batch, next_obs_batch, done_mask
 
-    def epsilon(self, t):
-        return self.exploreSched.value(t)
+    def epsilon(self):
+        return self.exploreSched.value(self.totSteps)
 
     def shouldStop(self):
         return stopping_criterion(self.processes[0].env) >= 2e7
@@ -217,4 +273,3 @@ class ParallelExplorer(object):
 
     def getNumEps(self):
         return np.mean(np.array(self.numEps))
-
