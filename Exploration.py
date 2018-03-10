@@ -40,7 +40,10 @@ class EpsilonGreedy(object):
             obs = self.toTensorImg(np.expand_dims(self.replay_buffer.encode_recent_observation(), axis=0))
             #
             # Forward through network.
+            mode = self.model.training
+            self.model.eval()
             _, action = self.model(Variable(obs, volatile=True)).max(1)
+            self.model.train(mode)
             # _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
             action = action.data.cpu().numpy().astype(np.int_)
         self.lastObs, reward, done, info = self.env.step(action)
@@ -84,7 +87,7 @@ class EpsilonGreedy(object):
 
 
 class ExploreParallelCfg(object):
-    numEnv = 4
+    numEnv = 10
     model = None
     exploreSched = None
     stackFrameLen = 4
@@ -135,6 +138,8 @@ class ExploreProcess(mp.Process):
         self.done.copy_(torch.from_numpy(np.atleast_1d(done).astype(np.uint8)))
         self.action.copy_(torch.from_numpy(np.atleast_1d(0)))
         self.meanRewards.copy_(torch.from_numpy(np.atleast_1d(0)))
+        self.nEps.copy_(torch.from_numpy(np.atleast_1d(0)))
+
         #
         # Notify that remembory is ready.
         self.com.send(0)
@@ -163,6 +168,7 @@ class ExploreProcess(mp.Process):
             self.done.copy_(torch.from_numpy(np.atleast_1d(done).astype(np.uint8)))
             self.action.copy_(torch.from_numpy(np.atleast_1d(action)))
             self.meanRewards.copy_(torch.from_numpy(np.atleast_1d(mean_episode_reward)))
+            self.nEps.copy_(torch.from_numpy(np.atleast_1d(len(lastRew))))
             #
             # Notify that remembory is ready.
             self.com.send(0)
@@ -190,7 +196,7 @@ class ParallelExplorer(object):
         self.actionVec.storage().share_memory_()
         self.threads = np.atleast_1d(np.arange(self.nThreads, dtype=np.int_))
         self.toTensorImg, self.toTensor, self.use_cuda = TensorConfig.getTensorConfiguration()
-        self.cfg = cfg        
+        self.cfg = cfg
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
             sendP, subpipe = mp.Pipe()
