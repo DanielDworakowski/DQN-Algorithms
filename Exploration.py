@@ -1,13 +1,16 @@
 import os
 import torch
 import random
+import cProfile
 import numpy as np
 import ConfigureEnv
 import TensorConfig
+import threading
 import torch.multiprocessing as mp
 from dqn_utils import ReplayBuffer
 from torch.autograd import Variable
 from dqn_utils import get_wrapper_by_name
+
 #
 # When to stop
 def stopping_criterion(env):
@@ -125,6 +128,10 @@ class ExploreProcess(mp.Process):
         print('Initialized process ', procId)
 
     def run(self):
+        # self.explore()
+        cProfile.runctx('self.explore()', globals(), locals(), 'profile-%d.perf'%self.procId)
+
+    def explore(self):
         print('Process: %d has PID: %d'%(self.procId, os.getpid()))
         #
         # For the first run, just setup a random action.
@@ -173,7 +180,7 @@ class ExploreProcess(mp.Process):
             # Notify that remembory is ready.
             self.com.send(0)
 
-class ParallelExplorer(object):
+class ParallelExplorer(threading.Thread):
 
     def __init__(self, cfg):
         #
@@ -215,6 +222,9 @@ class ParallelExplorer(object):
         for proc in self.processes:
             proc.terminate()
             proc.join()
+
+    def run(self):
+        pass
 
     def explore(self, nStep):
         #

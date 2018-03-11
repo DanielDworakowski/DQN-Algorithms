@@ -113,8 +113,8 @@ def learn(env,
         if (explorer.numSteps() > learning_starts and t % learning_freq == 0 and explorer.can_sample(batch_size)):
             #
             # Update as many times as we would have updated if everything was serial.
-            # for i in range(explorer.stepSize()):
-            for i in range(1):
+            for i in range(explorer.stepSize()):
+            # for i in range(1):
                 #
                 # Sample from replay buffer.
                 sample = explorer.sample(batch_size)
