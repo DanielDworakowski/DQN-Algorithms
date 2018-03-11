@@ -224,12 +224,9 @@ class ParallelExplorer(threading.Thread):
             proc.join()
 
     def run(self):
-        pass
+        self.explore()
 
-    def explore(self, nStep):
-        #
-        # Can only do at most nThreads steps at once.
-        assert nStep <= self.nThreads
+    def recv(self):
         #
         # Gather the responses from each.
         for pipeIdx in self.followup:
@@ -247,6 +244,8 @@ class ParallelExplorer(threading.Thread):
         #
         # We have finished following up.
         self.followup = []
+
+    def send(self, nStep):
         #
         # Keep track of the effective number of steps.
         curStep = self.totSteps
@@ -282,6 +281,14 @@ class ParallelExplorer(threading.Thread):
         for idx in thSelect:
             self.comms[idx].send(curStep)
             self.followup.append(idx)
+
+    def explore(self, nStep):
+        #
+        # Can only do at most nThreads steps at once.
+        assert nStep <= self.nThreads
+        self.recv()
+        self.send(nStep)
+
 
     def close(self):
         for proc in self.processes:
