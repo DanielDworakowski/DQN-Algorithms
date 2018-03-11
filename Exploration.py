@@ -1,4 +1,5 @@
 import os
+import queue
 import torch
 import random
 import cProfile
@@ -183,6 +184,7 @@ class ExploreProcess(mp.Process):
 class ParallelExplorer(threading.Thread):
 
     def __init__(self, cfg):
+        super(ParallelExplorer, self).__init__()
         #
         # This must be set in the main.
         # mp.set_start_method('forkserver')
@@ -216,6 +218,11 @@ class ParallelExplorer(threading.Thread):
             self.followup.append(idx)
         self.nAct = self.processes[0].env.action_space.n
         self.imshape = self.processes[0].env.observation_space.shape
+        self.recv()
+        self.workQueue = queue.Queue()
+        self.doneQueue = queue.Queue()
+        self.doneQueue.put(0)
+        self.start()
         print('Parent PID: %d'%os.getpid())
 
     def __del__(self):
@@ -224,7 +231,11 @@ class ParallelExplorer(threading.Thread):
             proc.join()
 
     def run(self):
-        self.explore()
+        while True:
+            nStep = self.workQueue.get()
+            self.send(nStep)
+            self.recv()
+            self.doneQueue.put(0)
 
     def recv(self):
         #
@@ -282,13 +293,16 @@ class ParallelExplorer(threading.Thread):
             self.comms[idx].send(curStep)
             self.followup.append(idx)
 
-    def explore(self, nStep):
-        #
-        # Can only do at most nThreads steps at once.
-        assert nStep <= self.nThreads
-        self.recv()
-        self.send(nStep)
+    # def explore(self, nStep):
+    #     #
+    #     # Can only do at most nThreads steps at once.
+    #     # assert nStep <= self.nThreads
+    #     self.recv()
+    #     self.send(nStep)
 
+    def explore(self, nStep):
+        self.doneQueue.get()
+        self.workQueue.put(nStep)
 
     def close(self):
         for proc in self.processes:
