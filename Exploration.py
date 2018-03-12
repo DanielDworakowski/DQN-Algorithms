@@ -1,4 +1,5 @@
 import os
+import zmq
 import queue
 import torch
 import random
@@ -89,7 +90,6 @@ class EpsilonGreedy(object):
     def getNumEps(self):
         return len(get_wrapper_by_name(self.env, "Monitor").get_episode_rewards())
 
-
 class ExploreParallelCfg(object):
     numEnv = 10
     model = None
@@ -100,9 +100,8 @@ class ExploreParallelCfg(object):
 
 class ExploreProcess(mp.Process):
 
-    def __init__(self, coms, cfg, seed, procId, actionVec):
+    def __init__(self, cfg, seed, procId, actionVec):
         super(ExploreProcess, self).__init__()
-        self.com = coms
         self.model = cfg.model
         self.seed = seed
         self.procId = procId
@@ -134,12 +133,14 @@ class ExploreProcess(mp.Process):
 
     def explore(self):
         print('Process: %d has PID: %d'%(self.procId, os.getpid()))
+        self.context = zmq.Context()
+        self.com = self.context.socket(zmq.REQ)
+        self.com.connect('tcp://127.0.0.1:%d'%(5557 + self.procId))
         #
         # For the first run, just setup a random action.
         self.lastObs = self.env.reset()
         obs, reward, done, info = self.env.step(0)
         self.retFrame.copy_(torch.from_numpy(obs))
-        # self.com.send(( reward, done, 0, 0, 0))
         self.lastObs = obs
         self.retFrame.copy_(torch.from_numpy(obs))
         self.reward.copy_(torch.from_numpy(np.atleast_1d(reward)))
@@ -147,16 +148,15 @@ class ExploreProcess(mp.Process):
         self.action.copy_(torch.from_numpy(np.atleast_1d(0)))
         self.meanRewards.copy_(torch.from_numpy(np.atleast_1d(0)))
         self.nEps.copy_(torch.from_numpy(np.atleast_1d(0)))
-
         #
         # Notify that remembory is ready.
-        self.com.send(0)
+        self.com.send_string('')
         #
         # Loop and do work.
         while True:
             #
             # Wait for actions.
-            step = self.com.recv()
+            self.com.recv()
             action = self.actionVec.numpy().astype(np.int_)[self.procId]
             obs, reward, done, info = self.env.step(action)
             #
@@ -179,9 +179,9 @@ class ExploreProcess(mp.Process):
             self.nEps.copy_(torch.from_numpy(np.atleast_1d(len(lastRew))))
             #
             # Notify that remembory is ready.
-            self.com.send(0)
+            self.com.send_string('')
 
-class ParallelExplorer(threading.Thread):
+class ParallelExplorer(object):
 
     def __init__(self, cfg):
         super(ParallelExplorer, self).__init__()
@@ -206,10 +206,13 @@ class ParallelExplorer(threading.Thread):
         self.threads = np.atleast_1d(np.arange(self.nThreads, dtype=np.int_))
         self.toTensorImg, self.toTensor, self.use_cuda = TensorConfig.getTensorConfiguration()
         self.cfg = cfg
+        self.context = zmq.Context()
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
-            sendP, subpipe = mp.Pipe()
-            explorer = ExploreProcess(subpipe, cfg, idx, idx, self.actionVec)
+            # sendP, subpipe = mp.Pipe()
+            sendP = self.context.socket(zmq.REP)
+            sendP.bind('tcp://127.0.0.1:%d'%(5557 + idx))
+            explorer = ExploreProcess(cfg, idx, idx, self.actionVec)
             explorer.daemon = True
             explorer.start()
             self.processes.append(explorer)
@@ -218,11 +221,7 @@ class ParallelExplorer(threading.Thread):
             self.followup.append(idx)
         self.nAct = self.processes[0].env.action_space.n
         self.imshape = self.processes[0].env.observation_space.shape
-        self.recv()
-        self.workQueue = queue.Queue()
-        self.doneQueue = queue.Queue()
-        self.doneQueue.put(0)
-        self.start()
+
         print('Parent PID: %d'%os.getpid())
 
     def __del__(self):
@@ -230,19 +229,11 @@ class ParallelExplorer(threading.Thread):
             proc.terminate()
             proc.join()
 
-    def run(self):
-        while True:
-            nStep = self.workQueue.get()
-            self.send(nStep)
-            self.recv()
-            self.doneQueue.put(0)
-
     def recv(self):
         #
         # Gather the responses from each.
         for pipeIdx in self.followup:
-            ret = self.comms[pipeIdx].recv()
-            # reward, done, action, meanReward, nEp = ret
+            self.comms[pipeIdx].recv_string()
             reward = self.processes[pipeIdx].reward.clone().numpy()
             done = self.processes[pipeIdx].done.clone().numpy().astype(np.bool)
             action = self.processes[pipeIdx].action.clone().numpy()
@@ -290,19 +281,19 @@ class ParallelExplorer(threading.Thread):
         #
         # Notify all workers.
         for idx in thSelect:
-            self.comms[idx].send(curStep)
+            self.comms[idx].send_string('')
             self.followup.append(idx)
 
-    # def explore(self, nStep):
-    #     #
-    #     # Can only do at most nThreads steps at once.
-    #     # assert nStep <= self.nThreads
-    #     self.recv()
-    #     self.send(nStep)
-
     def explore(self, nStep):
-        self.doneQueue.get()
-        self.workQueue.put(nStep)
+        #
+        # Can only do at most nThreads steps at once.
+        # assert nStep <= self.nThreads
+        self.recv()
+        self.send(nStep)
+
+    # def explore(self, nStep):
+    #     self.doneQueue.get()
+    #     self.workQueue.put(nStep)
 
     def close(self):
         for proc in self.processes:
