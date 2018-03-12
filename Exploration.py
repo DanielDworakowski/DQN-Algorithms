@@ -38,7 +38,7 @@ class EpsilonGreedy(object):
         #
         # Epsilon greedy exploration.
         action = None
-        if random.random() < self.exploreSched.value(t):
+        if random.random() < self.exploreSched.value(self.nSteps):
             action = np.random.randint(0, self.nAct, dtype=np.int_)
         else:
             obs = self.toTensorImg(np.expand_dims(self.replay_buffer.encode_recent_observation(), axis=0))

@@ -98,8 +98,6 @@ def learn(env,
     # Training loop.
     pbar = None
     for t in itertools.count():
-        if t == 10000:
-            sys.exit(0)
         #
         # Check if we are done.
         if explorer.shouldStop():
