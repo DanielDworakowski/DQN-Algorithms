@@ -98,8 +98,8 @@ def learn(env,
     # Training loop.
     pbar = None
     for t in itertools.count():
-        # if t == 200:
-        #     sys.exit(0)
+        if t == 10000:
+            sys.exit(0)
         #
         # Check if we are done.
         if explorer.shouldStop():
@@ -111,10 +111,12 @@ def learn(env,
         #
         # Learning gating.
         if (explorer.numSteps() > learning_starts and t % learning_freq == 0 and explorer.can_sample(batch_size)):
+        # if (explorer.numSteps() > learning_starts and t % 1 == 0 and explorer.can_sample(batch_size)):
             #
             # Update as many times as we would have updated if everything was serial.
             for i in range(explorer.stepSize()):
             # for i in range(1):
+                # print(explorer.stepSize())
                 #
                 # Sample from replay buffer.
                 sample = explorer.sample(batch_size)
