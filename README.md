@@ -1,6 +1,6 @@
 # SYDE522 Final Project
 
-Initial results. 
+Initial results of Vanilla DQN trained with the pong environment. 
 
 <a href="http://www.youtube.com/watch?feature=player_embedded&v=gvLfe2pQrbs
 " target="_blank"><img src="http://img.youtube.com/vi/gvLfe2pQrbs/0.jpg" 
