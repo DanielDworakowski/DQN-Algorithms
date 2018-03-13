@@ -13,6 +13,7 @@ Exploration of various algorithms and implementations starting from what was pre
 
 Additionally exploring the impact of learning with:
 
-1. multiple parallel agents (https://arxiv.org/pdf/1602.01783.pdf)
-2. Double DQN (https://arxiv.org/pdf/1509.06461.pdf)
-3. Other.
+1. Vanilla DQN (https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf) (working)
+2. Multiple parallel agents (https://arxiv.org/pdf/1602.01783.pdf) (testing)
+3. Double DQN (https://arxiv.org/pdf/1509.06461.pdf) 
+4. TBD.
