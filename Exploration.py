@@ -91,7 +91,7 @@ class EpsilonGreedy(object):
 
 
 class ExploreParallelCfg(object):
-    numEnv = 10
+    numEnv = 5
     model = None
     exploreSched = None
     stackFrameLen = 4
@@ -342,3 +342,10 @@ class ParallelExplorer(object):
 
     def getNumEps(self):
         return np.mean(np.array(self.numEps))
+
+
+class MultiExplorer(ParallelExplorer):
+
+    def __init__(self, cfg):
+        super(MultiExplorer, self).__init__()
+
