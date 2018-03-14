@@ -84,7 +84,11 @@ class EpsilonGreedy(object):
 
     def getRewards(self):
         # episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
-        return np.mean(get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()[-100:])
+        rew = get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()[-100:]
+        ret = 0
+        if len(rew) > 0:
+            ret = np.mean(rew)
+        return ret
 
     def getNumEps(self):
         return len(get_wrapper_by_name(self.env, "Monitor").get_episode_rewards())

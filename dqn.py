@@ -77,7 +77,7 @@ def learn(conf):
     trainQ_func = conf.q_func
     targetQ_func = copy.deepcopy(trainQ_func).eval()
     objective = conf.objective
-    explorer = conf.explorer
+    explorer = conf.getExplorer()
     lr_schedule = conf.schedule
     runningLoss = 0
     #

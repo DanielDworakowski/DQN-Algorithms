@@ -27,18 +27,7 @@ def getConfig(args):
     return conf
 # 
 # Setup learning.
-def atari_learn(args):
-    # explorer = Exploration.EpsilonGreedy(explorationSched, TensorConfig.TensorConfig(), replay_buffer, env, model)
-    # parallelCfg = Exploration.ExploreParallelCfg()
-    # parallelCfg.model = model
-    # parallelCfg.exploreSched = explorationSched
-    # parallelCfg.numFramesInBuffer = args.replaySize
-    # explorer = Exploration.ParallelExplorer(parallelCfg)
-    # print('Set seeds!')
-    # setRandomSeeds(seed)
-    conf = getConfig(args)
-    #
-    # Learn.
+def doRL(conf):
     import dqn
     dqn.learn(conf)
 
@@ -51,9 +40,12 @@ def setRandomSeeds(seed):
 
 def main():
     args = getInputArgs()
+    # 
+    # Get configuration.
+    conf = getConfig(args)
     #
     # The learning fn.
-    atari_learn(args = args)
+    doRL(conf)
 
 if __name__ == "__main__":
     mp.set_start_method('forkserver')

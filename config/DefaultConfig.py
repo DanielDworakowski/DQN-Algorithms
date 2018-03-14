@@ -9,13 +9,6 @@ from atari_wrappers import *
 from models import DeepMindModel
 
 class DefaultConfig(object):
-    
-    def setRandomSeeds(self, seed):
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-        random.seed(seed)
 
     def __init__(self, seed):
         # 
@@ -55,9 +48,6 @@ class DefaultConfig(object):
         # Replay.
         self.replay_buffer = ReplayBuffer(self.replaySize, self.frameHist)
         # 
-        # Explorer type (exploration policy).
-        self.explorer = Exploration.EpsilonGreedy(self.explorationSched, TensorConfig.TensorConfig(), self.replay_buffer, self.env, self.q_func)
-        # 
         # How to convert numpy to tensors (CUDA conversion and so on).
         self.tensorCfg = TensorConfig.getTensorConfiguration()
         # 
@@ -89,7 +79,19 @@ class DefaultConfig(object):
         # 
         # Randomize.
         self.setRandomSeeds(seed)
-
+    # 
+    # Explorer type (exploration policy).
+    def getExplorer(self):
+        explorer = Exploration.EpsilonGreedy(self.explorationSched, TensorConfig.TensorConfig(), self.replay_buffer, self.env, self.q_func)
+        return explorer
+    # 
+    # Set the random seeds.
+    def setRandomSeeds(self, seed):
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
 #
 # Class to use the default configuration.
 class Config(DefaultConfig):
@@ -97,4 +99,3 @@ class Config(DefaultConfig):
     # Initialize.
     def __init__(self, seed):
         super(Config, self).__init__(seed)
-        
