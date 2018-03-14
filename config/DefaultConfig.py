@@ -10,7 +10,7 @@ from models import DeepMindModel
 
 class DefaultConfig(object):
 
-    def __init__(self, seed):
+    def __init__(self, seed, objtype = Objectives.Objective_type.DQN_VANILLA):
         # 
         # Whether to use TB.
         self.useTensorBoard = False
@@ -58,7 +58,7 @@ class DefaultConfig(object):
         self.gamma = 0.99
         # 
         # Gather data until.
-        self.learning_starts = 50000
+        self.learning_starts = 500
         # 
         # How often to learn.
         self.learning_freq = 4
@@ -70,7 +70,7 @@ class DefaultConfig(object):
         self.grad_norm_clipping = 10
         # 
         # Objective function.
-        self.objective = Objectives.Objective(self.tensorCfg)
+        self.objective = Objectives.Objective(self.tensorCfg, objtype)
         #
         # Exploration scheduler.
         def sched(epoch):

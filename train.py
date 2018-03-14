@@ -31,13 +31,6 @@ def doRL(conf):
     import dqn
     dqn.learn(conf)
 
-def setRandomSeeds(seed):
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
-
 def main():
     args = getInputArgs()
     # 

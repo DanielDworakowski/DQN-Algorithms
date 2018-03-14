@@ -1,5 +1,5 @@
 import Exploration
-from DefaultConfig import DefaultConfig 
+from config.DefaultConfig import DefaultConfig 
 #
 # Class to use the default configuration.
 class Config(DefaultConfig):
