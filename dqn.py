@@ -47,28 +47,16 @@ def doNothing(logger = None, model = None, tmp = None, tmp1 = None):
     pass
 #
 # Training fn.
-def learn(env,
-          q_func,
-          optimizer,
-          lr_schedule,
-          explorer,
-          tensorCfg,
-          batch_size=32,
-          gamma=0.99,
-          learning_starts=50000,
-          learning_freq=4,
-          target_update_freq=10000,
-          grad_norm_clipping=10,
-          useTB=False):
+def learn(conf):
 
-    assert type(env.observation_space) == gym.spaces.Box
-    assert type(env.action_space)      == gym.spaces.Discrete
+    assert type(conf.env.observation_space) == gym.spaces.Box
+    assert type(conf.env.action_space)      == gym.spaces.Discrete
     #
     # Environment information.
-    nAct = env.action_space.n
+    nAct = conf.env.action_space.n
     #
     # Information for tensor configuration.
-    toTensorImg, toTensor, use_cuda = tensorCfg
+    toTensorImg, toTensor, use_cuda = conf.tensorCfg
     #
     # Logging setup.
     logger = None
@@ -76,7 +64,7 @@ def learn(env,
     closeLogger = doNothing
     LOG_EVERY_N_STEPS = 10000
     PROGRESS_UPDATE_FREQ = 100
-    if useTB:
+    if conf.useTensorBoard:
         logger = SummaryWriter()
         logEpoch = logEpochTensorboard
         closeLogger = closeTensorboard
@@ -85,9 +73,12 @@ def learn(env,
     num_param_updates = 0
     mean_episode_reward = -float('nan')
     best_mean_episode_reward = -float('inf')
-    trainQ_func = q_func
+    optimizer = conf.optimizer
+    trainQ_func = conf.q_func
     targetQ_func = copy.deepcopy(trainQ_func).eval()
-    objective = Objectives.Objective(tensorCfg)
+    objective = conf.objective
+    explorer = conf.getExplorer()
+    lr_schedule = conf.schedule
     runningLoss = 0
     #
     # Send networks to CUDA.
@@ -108,8 +99,8 @@ def learn(env,
         explorer.explore(explorer.stepSize())
         #
         # Learning gating.
-        if (explorer.numSteps() > learning_starts and t % learning_freq == 0 and explorer.can_sample(batch_size)):
-        # if (explorer.numSteps() > learning_starts and t % 1 == 0 and explorer.can_sample(batch_size)):
+        if (explorer.numSteps() > conf.learning_starts and t % conf.learning_freq == 0 and explorer.can_sample(conf.batch_size)):
+        # if (explorer.numSteps() > conf.learning_starts and t % 1 == 0 and explorer.can_sample(conf.batch_size)):
             #
             # Update as many times as we would have updated if everything was serial.
             for i in range(explorer.stepSize()):
@@ -117,10 +108,10 @@ def learn(env,
                 # print(explorer.stepSize())
                 #
                 # Sample from replay buffer.
-                sample = explorer.sample(batch_size)
+                sample = explorer.sample(conf.batch_size)
                 #
                 # Get the objective information (bellman eq).
-                trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, gamma)
+                trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, conf.gamma)
                 #
                 # Calculate Huber loss.
                 loss = F.smooth_l1_loss(trainQ, targetQ)
@@ -131,13 +122,13 @@ def learn(env,
                 loss.backward()
                 #
                 # Clip the gradient.
-                # torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), grad_norm_clipping)
+                # torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), conf.grad_norm_clipping)
                 optimizer.step()
                 lr_schedule.step(t)
                 num_param_updates += 1
                 #
-                # Update the target network as needed (target_update_freq).
-                if num_param_updates % target_update_freq == 0:
+                # Update the target network as needed (conf.target_update_freq).
+                if num_param_updates % conf.target_update_freq == 0:
                     targetQ_func.load_state_dict(trainQ_func.state_dict())
                     targetQ_func.eval()
                     if use_cuda:
