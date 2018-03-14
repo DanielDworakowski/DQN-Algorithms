@@ -171,4 +171,4 @@ def learn(env,
             pbar.update(PROGRESS_UPDATE_FREQ * explorer.stepSize())
     #
     # Close logging (TB))
-    closeLogger()
+    closeLogger(logger)
