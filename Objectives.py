@@ -37,8 +37,8 @@ class Objective(object):
         # Convert everything to be tensors, send to the GPU as needed.
         notDoneMask = (done_mask == False).astype(np.uint8)
         nextValidObs = np.take(next_obs_batch, np.argwhere(notDoneMask).squeeze(), axis=0)
+        rew = Variable(self.toTensor(rew_batch), requires_grad=False)
         act = Variable(self.toTensor(act_batch))
-        rew = Variable(self.toTensor(rew_batch))
         obs = Variable(self.toTensorImg(obs_batch))
         expectedQ = Variable(self.toTensor(np.zeros((obs_batch.shape[0]), dtype=np.float32)))
         nextValidObs = Variable(self.toTensorImg(nextValidObs), volatile = True)
