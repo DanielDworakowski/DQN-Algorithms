@@ -84,10 +84,10 @@ class EpsilonGreedy(object):
 
     def getRewards(self):
         # episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
-        rew = get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()[-100:]
-        ret = 0
-        if len(rew) > 0:
-            ret = np.mean(rew)
+        rews = get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()
+        ret = -float('nan')
+        if len(rews) > 100:
+            ret = np.mean(rews[-100:])
         return ret
 
     def getNumEps(self):
@@ -172,7 +172,7 @@ class ExploreProcess(mp.Process):
             #
             # Store effects.
             lastRew = get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()
-            mean_episode_reward = 0
+            mean_episode_reward = -float('inf')
             if (len(lastRew) > 0):
                 mean_episode_reward = np.mean(lastRew[-100:])
             # self.com.send(( reward, done, action, mean_episode_reward, len(lastRew)))
@@ -264,7 +264,6 @@ class ParallelExplorer(object):
         exploration = np.atleast_1d(torch.from_numpy(np.random.uniform(size=nStep)))
         randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=nStep, dtype=np.int_))
         self.actionVec.copy_(randomActions)
-        # runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration >= self.exploreSched.value(curStep)])
         runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration < self.exploreSched.value(curStep)])
         obsList = []
         #
@@ -342,6 +341,7 @@ class ParallelExplorer(object):
 
     def getRewards(self):
         # episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
+        # TODO: make sure this is correct when there are no rewards yet.
         return np.mean(np.array(self.meanRewards))
 
     def getNumEps(self):

@@ -100,12 +100,9 @@ def learn(conf):
         #
         # Learning gating.
         if (explorer.numSteps() > conf.learning_starts and t % conf.learning_freq == 0 and explorer.can_sample(conf.batch_size)):
-        # if (explorer.numSteps() > conf.learning_starts and t % 1 == 0 and explorer.can_sample(conf.batch_size)):
             #
             # Update as many times as we would have updated if everything was serial.
             for i in range(explorer.stepSize()):
-            # for i in range(1):
-                # print(explorer.stepSize())
                 #
                 # Sample from replay buffer.
                 sample = explorer.sample(conf.batch_size)
@@ -122,7 +119,7 @@ def learn(conf):
                 loss.backward()
                 #
                 # Clip the gradient.
-                # torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), conf.grad_norm_clipping)
+                #torch.nn.utils.clip_grad_norm(trainQ_func.parameters(), conf.grad_norm_clipping)
                 optimizer.step()
                 lr_schedule.step(t)
                 num_param_updates += 1
@@ -134,9 +131,14 @@ def learn(conf):
                     if use_cuda:
                         targetQ_func.cuda()
         #
-        # Logging.
+        # Statistics.
         mean_episode_reward = explorer.getRewards()
-        best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+        if not np.isnan(mean_episode_reward):
+            best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+        else:
+            mean_episode_reward = -float('nan')
+        #
+        # TB and print
         if t % (LOG_EVERY_N_STEPS // explorer.stepSize()) == 0:
             print("Timestep %d" % (t,))
             print("mean reward (100 episodes) %f" % mean_episode_reward)
