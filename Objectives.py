@@ -40,7 +40,7 @@ class Objective(object):
         rew = Variable(self.toTensor(rew_batch), requires_grad=False)
         act = Variable(self.toTensor(act_batch))
         obs = Variable(self.toTensorImg(obs_batch))
-        expectedQ = Variable(self.toTensor(np.zeros((obs_batch.shape[0]), dtype=np.float32)))
+        expectedQ = Variable(self.toTensor(np.zeros((obs_batch.shape[0]), dtype=np.float32)), volatile=True)
         nextValidObs = Variable(self.toTensorImg(nextValidObs), volatile = True)
         notDoneTensor = Variable(self.toTensor(notDoneMask))
         #
@@ -51,7 +51,7 @@ class Objective(object):
         expectedQ[notDoneTensor] = self.targetFn(targetNet, trainNet, nextValidObs)
         #
         # Calculate the belman error.
-        expectedQ.volatile = False
+        # expectedQ.volatile = False
         expectedQ = expectedQ.mul_(gamma) + rew
         return trainQ, expectedQ
 
