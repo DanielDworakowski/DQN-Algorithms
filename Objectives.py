@@ -28,8 +28,8 @@ class Objective(object):
         return targetQValid
 
     def _ddqn_target(self, targetNet, trainNet, obs):
-        _, act_plus = trainNet(obs).max(1)
-        return torch.gather(targetNet(obs), 1, act_plus.unsqueeze_(1)) 
+        _, act_plus = trainNet(obs).max(1, keepdim=True)
+        return torch.gather(targetNet(obs), 1, act_plus) 
 
     def bellmanError(self, trainNet, targetNet, samples, gamma):
         obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = samples
@@ -51,7 +51,7 @@ class Objective(object):
         expectedQ[notDoneTensor] = self.targetFn(targetNet, trainNet, nextValidObs)
         #
         # Calculate the belman error.
-        # expectedQ.volatile = False
+        expectedQ.volatile = False
         expectedQ = expectedQ.mul_(gamma) + rew
         return trainQ, expectedQ
 
