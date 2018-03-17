@@ -80,6 +80,7 @@ def learn(conf):
     explorer = conf.getExplorer()
     lr_schedule = conf.schedule
     runningLoss = 0
+    lossUpdates = 0
     #
     # Send networks to CUDA.
     if use_cuda:
@@ -123,6 +124,7 @@ def learn(conf):
                 optimizer.step()
                 lr_schedule.step(t)
                 num_param_updates += 1
+                lossUpdates += 1
                 #
                 # Update the target network as needed (conf.target_update_freq).
                 if num_param_updates % conf.target_update_freq == 0:
@@ -150,13 +152,16 @@ def learn(conf):
                 pbar.close()
             sys.stdout.flush()
             pbar = tqdm(total=LOG_EVERY_N_STEPS)
+            loss = -float('nan')
+            if lossUpdates != 0:
+                loss /= lossUpdates
             summary = {
-                'Mean reward (100 episodes)': mean_episode_reward,
-                'Best mean reward': best_mean_episode_reward,
+                'Mean reward (100 episodes)': np.atleast_1d(mean_episode_reward),
+                'Best mean reward': np.atleast_1d(best_mean_episode_reward),
                 'Episodes': explorer.getNumEps(),
                 'Learning rate': lr_schedule.get_lr()[0],
                 'Exploration': explorer.epsilon(),
-                'Train loss': runningLoss / LOG_EVERY_N_STEPS,
+                'Train loss': loss,
             }
             logEpoch(logger, trainQ_func, summary, t)
             runningLoss = 0

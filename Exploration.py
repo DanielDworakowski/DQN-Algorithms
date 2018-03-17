@@ -99,7 +99,7 @@ class ExploreParallelCfg(object):
     model = None
     exploreSched = None
     stackFrameLen = 4
-    numFramesInBuffer = 1
+    numFramesPerBuffer = 1
     maxSteps = 2e7
 
 class ExploreProcess(mp.Process):
@@ -205,7 +205,7 @@ class ParallelExplorer(object):
         self.numEps = [0] * self.nThreads
         self.nInBuffers = 0
         self.totSteps = 0
-        self.maxBuffers = cfg.numFramesInBuffer
+        self.maxBuffers = cfg.numFramesPerBuffer
         self.exploreSched = cfg.exploreSched
         self.model = cfg.model
         self.actionVec = torch.LongTensor(self.nThreads)
@@ -222,7 +222,7 @@ class ParallelExplorer(object):
             explorer.start()
             self.processes.append(explorer)
             self.comms.append(sendP)
-            self.replayBuffers.append(ReplayBuffer(cfg.numFramesInBuffer // cfg.numEnv, cfg.stackFrameLen))
+            self.replayBuffers.append(ReplayBuffer(cfg.numFramesPerBuffer, cfg.stackFrameLen))
             self.followup.append(idx)
         self.nAct = self.processes[0].env.action_space.n
         self.imshape = self.processes[0].env.observation_space.shape
@@ -306,7 +306,7 @@ class ParallelExplorer(object):
         # Ensure that all can sample.
         ret = True
         for buf in self.replayBuffers:
-            ret = ret and buf.can_sample(batchSize)
+            ret = ret and buf.can_sample(batchSize // self.nThreads)
         return ret
 
     def sample(self, batchSize):
@@ -347,9 +347,4 @@ class ParallelExplorer(object):
     def getNumEps(self):
         return np.mean(np.array(self.numEps))
 
-
-class MultiExplorer(ParallelExplorer):
-
-    def __init__(self, cfg):
-        super(MultiExplorer, self).__init__()
 
