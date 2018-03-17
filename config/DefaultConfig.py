@@ -36,8 +36,8 @@ class DefaultConfig(object):
         self.explorationSched = PiecewiseSchedule([
                                 (0, 1.0),
                                 (1e6, 0.1),
-                                (num_iterations / 1.5, 0.05),
-                            ], outside_value=0.05)
+                                (num_iterations / 1.5, 0.01),
+                            ], outside_value=0.01)
         #
         # Size of replay buffer.
         self.replaySize = int(1e6)
@@ -69,6 +69,9 @@ class DefaultConfig(object):
         # Maximum gradient size.
         self.grad_norm_clipping = 10
         #
+        # Max steps in the env.
+        self.maxSteps = 4e7
+        #
         # Objective function.
         self.objective = Objectives.Objective(self.tensorCfg, objtype)
         #
@@ -82,7 +85,7 @@ class DefaultConfig(object):
     #
     # Explorer type (exploration policy).
     def getExplorer(self):
-        explorer = Exploration.EpsilonGreedy(self.explorationSched, TensorConfig.TensorConfig(), self.replay_buffer, self.env, self.q_func)
+        explorer = Exploration.EpsilonGreedy(self.explorationSched, TensorConfig.TensorConfig(), self.replay_buffer, self.env, self.q_func, self.maxSteps)
         return explorer
     #
     # Set the random seeds.
