@@ -15,5 +15,5 @@ Additionally exploring the impact of learning with:
 
 1. Vanilla DQN (https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf) (working)
 2. Multiple parallel agents (https://arxiv.org/pdf/1602.01783.pdf) (testing)
-3. Double DQN (https://arxiv.org/pdf/1509.06461.pdf) 
+3. Double DQN (https://arxiv.org/pdf/1509.06461.pdf) (testing)
 4. TBD.
