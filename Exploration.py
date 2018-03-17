@@ -21,7 +21,7 @@ def stopping_criterion(env):
 
 class EpsilonGreedy(object):
 
-    def __init__(self, exploreSched, tensorCfg, replay, env, model):
+    def __init__(self, exploreSched, tensorCfg, replay, env, model, maxSteps):
         self.toTensorImg, self.toTensor, self.use_cuda = tensorCfg.getConfig()
         self.replay_buffer = replay
         self.env = env
@@ -30,6 +30,7 @@ class EpsilonGreedy(object):
         self.nAct = env.action_space.n
         self.exploreSched = exploreSched
         self.nSteps = 0
+        self.maxSteps = maxSteps
         # if self.use_cuda:
         #     model.cuda()
 
@@ -74,7 +75,7 @@ class EpsilonGreedy(object):
         return self.exploreSched.value(self.nSteps)
 
     def shouldStop(self):
-        return stopping_criterion(self.env) >= 2e7
+        return stopping_criterion(self.env) >= self.maxSteps
 
     def numSteps(self):
         return self.nSteps
@@ -100,7 +101,7 @@ class ExploreParallelCfg(object):
     exploreSched = None
     stackFrameLen = 4
     numFramesInBuffer = 1
-    maxSteps = 2e7
+    maxSteps = 4e7
 
 class ExploreProcess(mp.Process):
 
@@ -331,7 +332,7 @@ class ParallelExplorer(object):
         return self.exploreSched.value(self.totSteps)
 
     def shouldStop(self):
-        return stopping_criterion(self.processes[0].env) >= 2e7
+        return stopping_criterion(self.processes[0].env) >= self.cfg.maxSteps
 
     def numSteps(self):
         return self.totSteps
