@@ -155,6 +155,7 @@ def learn(conf):
             loss = -float('nan')
             if lossUpdates != 0:
                 loss /= lossUpdates
+            lossUpdates = 0
             summary = {
                 'Mean reward (100 episodes)': np.atleast_1d(mean_episode_reward),
                 'Best mean reward': np.atleast_1d(best_mean_episode_reward),
