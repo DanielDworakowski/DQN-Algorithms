@@ -166,6 +166,8 @@ def learn(conf):
             }
             logEpoch(logger, trainQ_func, summary, t)
             runningLoss = 0
+        # 
+        # Progress bar update.
         if t % PROGRESS_UPDATE_FREQ == 0:
             pbar.update(PROGRESS_UPDATE_FREQ * explorer.stepSize())
     #

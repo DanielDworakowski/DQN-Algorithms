@@ -11,7 +11,11 @@ class Config(DefaultConfig):
         self.parallelCfg.model = self.q_func
         self.parallelCfg.exploreSched = self.explorationSched
         self.parallelCfg.numFramesPerBuffer = self.frameHist 
+        self.parallelCfg.sampleLatest = True
         self.parallelCfg.numEnv = 32
+        #
+        # Dont need to wait since we are going sequentially, but allow for some randomness.  
+        self.learning_starts = 500
     # 
     # Override the explorer configuration.
     def getExplorer(self):

@@ -45,9 +45,6 @@ class DefaultConfig(object):
         # History.
         self.frameHist = 4
         #
-        # Replay.
-        self.replay_buffer = ReplayBuffer(self.replaySize, self.frameHist)
-        #
         # How to convert numpy to tensors (CUDA conversion and so on).
         self.tensorCfg = TensorConfig.getTensorConfiguration()
         #
@@ -69,7 +66,7 @@ class DefaultConfig(object):
         # Maximum gradient size.
         self.grad_norm_clipping = 10
         #
-        # Max steps in the env.
+        # Max steps in the env (different since env counts differently).
         self.maxSteps = 4e7
         #
         # Objective function.
@@ -85,7 +82,10 @@ class DefaultConfig(object):
     #
     # Explorer type (exploration policy).
     def getExplorer(self):
-        explorer = Exploration.EpsilonGreedy(self.explorationSched, TensorConfig.TensorConfig(), self.replay_buffer, self.env, self.q_func, self.maxSteps)
+        #
+        # Replay.
+        replay_buffer = ReplayBuffer(self.replaySize, self.frameHist)
+        explorer = Exploration.EpsilonGreedy(self.explorationSched, TensorConfig.TensorConfig(), replay_buffer, self.env, self.q_func, self.maxSteps)
         return explorer
     #
     # Set the random seeds.
