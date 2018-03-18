@@ -76,7 +76,7 @@ def learn(conf):
     logEpoch = doNothing
     closeLogger = doNothing
     LOG_EVERY_N_STEPS = 10000 * explorer.stepSize()
-    PROGRESS_UPDATE_FREQ = 100 * explorer.stepSize()
+    PROGRESS_UPDATE_FREQ = 100
     if conf.useTensorBoard:
         logger = SummaryWriter()
         logEpoch = logEpochTensorboard
@@ -170,7 +170,7 @@ def learn(conf):
         #
         # Progress bar update.
         if t % PROGRESS_UPDATE_FREQ == 0:
-            pbar.update(PROGRESS_UPDATE_FREQ)
+            pbar.update(PROGRESS_UPDATE_FREQ * explorer.stepSize())
     #
     # Close logging (TB))
     closeLogger(logger)

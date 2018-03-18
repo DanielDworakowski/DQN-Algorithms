@@ -12,7 +12,7 @@ class Config(DefaultConfig):
         self.parallelCfg.exploreSched = self.explorationSched
         self.parallelCfg.numFramesPerBuffer = self.frameHist + 1
         self.parallelCfg.sampleLatest = True
-        self.parallelCfg.numEnv = 2
+        self.parallelCfg.numEnv = 32
         self.batch_size = self.parallelCfg.numEnv
         #
         # Dont need to wait since we are going sequentially, but allow for some randomness.
