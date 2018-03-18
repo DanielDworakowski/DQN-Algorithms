@@ -102,6 +102,7 @@ class ExploreParallelCfg(object):
     stackFrameLen = 4
     numFramesInBuffer = 1
     maxSteps = 4e7
+    sampleLatest = False
 
 class ExploreProcess(mp.Process):
 
@@ -153,7 +154,6 @@ class ExploreProcess(mp.Process):
         self.action.copy_(torch.from_numpy(np.atleast_1d(0)))
         self.meanRewards.copy_(torch.from_numpy(np.atleast_1d(0)))
         self.nEps.copy_(torch.from_numpy(np.atleast_1d(0)))
-
         #
         # Notify that remembory is ready.
         self.barrier.wait()
@@ -215,6 +215,13 @@ class ParallelExplorer(object):
         self.toTensorImg, self.toTensor, self.use_cuda = TensorConfig.getTensorConfiguration()
         self.cfg = cfg
         self.barrier = mp.Barrier(self.nThreads + 1)
+        # 
+        # How to sample.
+        self.sampleFn = self._sampleRandom
+        if cfg.sampleLatest:
+            self.sampleFn = self._sampleLatest
+        # 
+        # Sample from all threads. 
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
             sendP, subpipe = mp.Pipe()
@@ -310,6 +317,12 @@ class ParallelExplorer(object):
             ret = ret and buf.can_sample(batchSize // self.nThreads)
         return ret
 
+    def _sampleRandom(self, threadIdx, n):
+        return self.replayBuffers[threadIdx].sample(threadBatch)
+
+    def _sampleLatest(self, threadIdx, n):
+        return self.replayBuffers[threadIdx].sample_latest()
+
     def sample(self, batchSize):
         bufferSamples = batchSize // self.nThreads
         extra = batchSize - self.nThreads * bufferSamples
@@ -319,7 +332,7 @@ class ParallelExplorer(object):
         samplelist = []
         for threadIdx in range(self.nThreads):
             threadBatch = bufferSamples + extraBuff[threadIdx]
-            samplelist.append(self.replayBuffers[threadIdx].sample(threadBatch))
+            samplelist.append(self.sampleFn(threadIdx, threadBatch))
         obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = zip(*samplelist)
         obs_batch = np.concatenate(obs_batch)
         act_batch = np.concatenate(act_batch)

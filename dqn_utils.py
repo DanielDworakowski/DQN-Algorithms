@@ -106,27 +106,6 @@ class LinearSchedule(object):
         fraction  = min(float(t) / self.schedule_timesteps, 1.0)
         return self.initial_p + fraction * (self.final_p - self.initial_p)
 
-def compute_exponential_averages(variables, decay):
-    """Given a list of tensorflow scalar variables
-    create ops corresponding to their exponential
-    averages
-    Parameters
-    ----------
-    variables: [tf.Tensor]
-        List of scalar tensors.
-    Returns
-    -------
-    averages: [tf.Tensor]
-        List of scalar tensors corresponding to averages
-        of al the `variables` (in order)
-    apply_op: tf.runnable
-        Op to be run to update the averages with current value
-        of variables.
-    """
-    averager = tf.train.ExponentialMovingAverage(decay=decay)
-    apply_op = averager.apply(variables)
-    return [averager.average(v) for v in variables], apply_op
-
 def clipGrad(model, maxNorm=10):
     """Minimized `objective` using `optimizer` w.r.t. variables in
     `var_list` while ensure the norm of the gradients for each
@@ -232,6 +211,10 @@ class ReplayBuffer(object):
         assert self.can_sample(batch_size)
         idxes = sample_n_unique(lambda: random.randint(0, self.num_in_buffer - 2), batch_size)
         return self._encode_sample(idxes)
+
+    def sample_latest(self):
+        assert self.can_sample(1)
+        return self._encode_sample([(self.next_idx - 1) % self.size])
 
     def encode_recent_observation(self):
         """Return the most recent `frame_history_len` frames.
