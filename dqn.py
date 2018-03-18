@@ -62,7 +62,7 @@ def learn(conf):
     logger = None
     logEpoch = doNothing
     closeLogger = doNothing
-    LOG_EVERY_N_STEPS = 10000
+    LOG_EVERY_N_STEPS = 1000
     PROGRESS_UPDATE_FREQ = 100
     if conf.useTensorBoard:
         logger = SummaryWriter()
@@ -142,30 +142,32 @@ def learn(conf):
         #
         # TB and print
         if t % (LOG_EVERY_N_STEPS // explorer.stepSize()) == 0:
+            loss_avg = -float('nan')
+            if lossUpdates != 0:
+                loss_avg = runningLoss / lossUpdates
+            lossUpdates = 0
+            runningLoss = 0
             print("Timestep %d" % (t,))
             print("mean reward (100 episodes) %f" % mean_episode_reward)
             print("best mean reward %f" % best_mean_episode_reward)
             print("episodes %d" % explorer.getNumEps())
             print("Exploration %f" % explorer.epsilon())
             print("learning_rate ", lr_schedule.get_lr())
+            print("Loss ", loss_avg)
+            print
             if pbar is not None:
                 pbar.close()
             sys.stdout.flush()
             pbar = tqdm(total=LOG_EVERY_N_STEPS)
-            loss = -float('nan')
-            if lossUpdates != 0:
-                loss /= lossUpdates
-            lossUpdates = 0
             summary = {
                 'Mean reward (100 episodes)': np.atleast_1d(mean_episode_reward),
                 'Best mean reward': np.atleast_1d(best_mean_episode_reward),
                 'Episodes': explorer.getNumEps(),
                 'Learning rate': lr_schedule.get_lr()[0],
                 'Exploration': explorer.epsilon(),
-                'Train loss': loss,
+                'Train loss': loss_avg,
             }
             logEpoch(logger, trainQ_func, summary, t)
-            runningLoss = 0
         # 
         # Progress bar update.
         if t % PROGRESS_UPDATE_FREQ == 0:
