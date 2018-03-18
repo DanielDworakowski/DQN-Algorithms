@@ -96,7 +96,7 @@ def learn(conf):
             break
         #
         # Exploration.
-        explorer.explore(explorer.stepSize())
+        explorer.explore(conf.epsilonStepSize)
         #
         # Learning gating.
         if (explorer.numSteps() > conf.learning_starts and t % conf.learning_freq == 0 and explorer.can_sample(conf.batch_size)):

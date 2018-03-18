@@ -152,13 +152,13 @@ class ExploreProcess(mp.Process):
         self.reward.copy_(torch.from_numpy(np.atleast_1d(reward)))
         self.done.copy_(torch.from_numpy(np.atleast_1d(done).astype(np.uint8)))
         self.action.copy_(torch.from_numpy(np.atleast_1d(0)))
-        self.meanRewards.copy_(torch.from_numpy(np.atleast_1d(0)))
+        self.meanRewards.copy_(torch.from_numpy(np.atleast_1d(-float('nan'))))
         self.nEps.copy_(torch.from_numpy(np.atleast_1d(0)))
         #
         # Notify that remembory is ready.
         self.barrier.wait()
         # self.com.send(0)
-        minEp = 100 // self.cfg.nThreads
+        minEp = 100 // self.cfg.numEnv
         #
         # Loop and do work.
         while True:
@@ -269,9 +269,9 @@ class ParallelExplorer(object):
         self.totSteps += nStep
         #
         # Select each of the threads to use.
-        thSelect = torch.from_numpy(np.random.choice(self.threads, nStep, replace=False))
-        exploration = np.atleast_1d(torch.from_numpy(np.random.uniform(size=nStep)))
-        randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=nStep, dtype=np.int_))
+        thSelect = torch.from_numpy(np.random.choice(self.threads, self.nThreads, replace=False))
+        exploration = np.atleast_1d(torch.from_numpy(np.random.uniform(size=self.nThreads)))
+        randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=self.nThreads, dtype=np.int_))
         self.actionVec.copy_(randomActions)
         runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration < self.exploreSched.value(curStep)])
         obsList = []

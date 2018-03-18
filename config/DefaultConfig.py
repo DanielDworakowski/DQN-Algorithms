@@ -75,6 +75,9 @@ class DefaultConfig(object):
         # How often to print logs.
         self.logPeriod = 10000
         #
+        # The step size in the exploration schedule.
+        self.epsilonStepSize = 1
+        #
         # Objective function.
         self.objective = Objectives.Objective(self.tensorCfg, objtype)
         #
