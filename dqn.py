@@ -58,17 +58,6 @@ def learn(conf):
     # Information for tensor configuration.
     toTensorImg, toTensor, use_cuda = conf.tensorCfg
     #
-    # Logging setup.
-    logger = None
-    logEpoch = doNothing
-    closeLogger = doNothing
-    LOG_EVERY_N_STEPS = 10000
-    PROGRESS_UPDATE_FREQ = LOG_EVERY_N_STEPS // 100
-    if conf.useTensorBoard:
-        logger = SummaryWriter()
-        logEpoch = logEpochTensorboard
-        closeLogger = closeTensorboard
-    #
     # Construct support objects for learning.
     num_param_updates = 0
     mean_episode_reward = -float('nan')
@@ -81,6 +70,17 @@ def learn(conf):
     lr_schedule = conf.schedule
     runningLoss = 0
     lossUpdates = 0
+    #
+    # Logging setup.
+    logger = None
+    logEpoch = doNothing
+    closeLogger = doNothing
+    LOG_EVERY_N_STEPS = 10000 * explorer.stepSize()
+    PROGRESS_UPDATE_FREQ = 100 * explorer.stepSize()
+    if conf.useTensorBoard:
+        logger = SummaryWriter()
+        logEpoch = logEpochTensorboard
+        closeLogger = closeTensorboard
     #
     # Send networks to CUDA.
     if use_cuda:
@@ -96,14 +96,13 @@ def learn(conf):
             break
         #
         # Exploration.
-        # explorer.explore(t, trainQ_func)
         explorer.explore(explorer.stepSize())
         #
         # Learning gating.
         if (explorer.numSteps() > conf.learning_starts and t % conf.learning_freq == 0 and explorer.can_sample(conf.batch_size)):
             #
             # Update as many times as we would have updated if everything was serial.
-            for i in range(explorer.stepSize()):
+            for i in range(conf.nBprop):
                 #
                 # Sample from replay buffer.
                 sample = explorer.sample(conf.batch_size)
@@ -141,7 +140,7 @@ def learn(conf):
             mean_episode_reward = -float('nan')
         #
         # TB and print
-        if t % (LOG_EVERY_N_STEPS // explorer.stepSize()) == 0:
+        if t % (LOG_EVERY_N_STEPS) == 0:
             loss_avg = -float('nan')
             if lossUpdates != 0:
                 loss_avg = runningLoss / lossUpdates
@@ -153,7 +152,7 @@ def learn(conf):
             print("episodes %d" % explorer.getNumEps())
             print("Exploration %f" % explorer.epsilon())
             print("learning_rate ", lr_schedule.get_lr())
-            print("Loss ", loss_avg)
+            print("Loss %.4f"%loss_avg)
             if pbar is not None:
                 pbar.close()
             sys.stdout.flush()
@@ -168,10 +167,10 @@ def learn(conf):
                 'Train loss': loss_avg,
             }
             logEpoch(logger, trainQ_func, summary, t)
-        # 
+        #
         # Progress bar update.
         if t % PROGRESS_UPDATE_FREQ == 0:
-            pbar.update(PROGRESS_UPDATE_FREQ * explorer.stepSize())
+            pbar.update(PROGRESS_UPDATE_FREQ)
     #
     # Close logging (TB))
     closeLogger(logger)

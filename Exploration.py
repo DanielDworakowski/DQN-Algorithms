@@ -215,13 +215,13 @@ class ParallelExplorer(object):
         self.toTensorImg, self.toTensor, self.use_cuda = TensorConfig.getTensorConfiguration()
         self.cfg = cfg
         self.barrier = mp.Barrier(self.nThreads + 1)
-        # 
+        #
         # How to sample.
         self.sampleFn = self._sampleRandom
         if cfg.sampleLatest:
             self.sampleFn = self._sampleLatest
-        # 
-        # Sample from all threads. 
+        #
+        # Sample from all threads.
         for idx in range(self.nThreads):
             print('Exploration: Actually set the seed properly.')
             sendP, subpipe = mp.Pipe()
@@ -359,6 +359,6 @@ class ParallelExplorer(object):
         return np.mean(np.array(self.meanRewards))
 
     def getNumEps(self):
-        return np.mean(np.array(self.numEps))
+        return np.sum(np.array(self.numEps))
 
 

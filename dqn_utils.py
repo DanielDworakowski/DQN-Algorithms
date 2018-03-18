@@ -136,7 +136,6 @@ class ReplayBuffer(object):
             - store frame_t and frame_(t+1) in the same buffer.
 
         For the tipical use case in Atari Deep RL buffer with 1M frames the total
-        memory footprint of this buffer is 10^6 * 84 * 84 bytes ~= 7 gigabytes
 
         Warning! Assumes that returning frame of zeros at the beginning
         of the episode, when there is less frames than `frame_history_len`,
@@ -253,7 +252,7 @@ class ReplayBuffer(object):
         else:
             # this optimization has potential to saves about 30% compute time \o/
             img_h, img_w = self.obs.shape[1], self.obs.shape[2]
-            return self.obs[start_idx:end_idx].transpose(1, 2, 0, 3).reshape(img_h, img_w, -1)
+            return self.obs[np.arange(start_idx, end_idx) % self.size].transpose(1, 2, 0, 3).reshape(img_h, img_w, -1)
 
     def store_frame(self, frame):
         """Store a single frame in the buffer at the next available index, overwriting
