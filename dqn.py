@@ -75,8 +75,8 @@ def learn(conf):
     logger = None
     logEpoch = doNothing
     closeLogger = doNothing
-    LOG_EVERY_N_STEPS = 10000 * explorer.stepSize()
-    PROGRESS_UPDATE_FREQ = 100
+    LOG_EVERY_N_STEPS = conf.logPeriod
+    PROGRESS_UPDATE_FREQ = LOG_EVERY_N_STEPS // 100
     if conf.useTensorBoard:
         logger = SummaryWriter()
         logEpoch = logEpochTensorboard
@@ -156,7 +156,7 @@ def learn(conf):
             if pbar is not None:
                 pbar.close()
             sys.stdout.flush()
-            pbar = tqdm(total=LOG_EVERY_N_STEPS)
+            pbar = tqdm(total=LOG_EVERY_N_STEPS * explorer.stepSize())
             loss = -float('nan')
             summary = {
                 'Mean reward (100 episodes)': np.atleast_1d(mean_episode_reward),

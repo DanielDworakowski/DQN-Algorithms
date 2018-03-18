@@ -72,6 +72,9 @@ class DefaultConfig(object):
         # Number of times to perform backprop / sample once learning starts (Parallel with replaybuffer.)
         self.nBprop = 1
         #
+        # How often to print logs.
+        self.logPeriod = 10000
+        #
         # Objective function.
         self.objective = Objectives.Objective(self.tensorCfg, objtype)
         #

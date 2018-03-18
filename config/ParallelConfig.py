@@ -14,6 +14,7 @@ class Config(DefaultConfig):
         self.parallelCfg.sampleLatest = True
         self.parallelCfg.numEnv = 32
         self.batch_size = self.parallelCfg.numEnv
+        self.logPeriod = int(self.parallelCfg.numEnv * 100)
         #
         # Dont need to wait since we are going sequentially, but allow for some randomness.
         self.learning_starts = 50

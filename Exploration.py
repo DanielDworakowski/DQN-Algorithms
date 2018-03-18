@@ -158,6 +158,7 @@ class ExploreProcess(mp.Process):
         # Notify that remembory is ready.
         self.barrier.wait()
         # self.com.send(0)
+        minEp = 100 // self.cfg.nThreads
         #
         # Loop and do work.
         while True:
@@ -173,9 +174,9 @@ class ExploreProcess(mp.Process):
             #
             # Store effects.
             lastRew = get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()
-            mean_episode_reward = -float('inf')
-            if (len(lastRew) > 0):
-                mean_episode_reward = np.mean(lastRew[-100:])
+            mean_episode_reward = -float('nan')
+            if (len(lastRew) > minEp):
+                mean_episode_reward = np.mean(lastRew[-minEp:])
             # self.com.send(( reward, done, action, mean_episode_reward, len(lastRew)))
             self.lastObs = obs
             self.retFrame.copy_(torch.from_numpy(self.lastObs))
@@ -202,7 +203,7 @@ class ParallelExplorer(object):
         self.replayBuffers = []
         self.curThread = 0
         self.nThreads = cfg.numEnv
-        self.meanRewards = [0] * self.nThreads
+        self.meanRewards = [-float('nan')] * self.nThreads
         self.numEps = [0] * self.nThreads
         self.nInBuffers = 0
         self.totSteps = 0
