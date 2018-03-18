@@ -36,8 +36,8 @@ class DefaultConfig(object):
         self.explorationSched = PiecewiseSchedule([
                                 (0, 1.0),
                                 (1e6, 0.1),
-                                (num_iterations / 1.5, 0.01),
-                            ], outside_value=0.01)
+                                (num_iterations / 1.3, 0.02),
+                            ], outside_value=0.02)
         #
         # Size of replay buffer.
         self.replaySize = int(1e6)

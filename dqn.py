@@ -63,7 +63,7 @@ def learn(conf):
     logEpoch = doNothing
     closeLogger = doNothing
     LOG_EVERY_N_STEPS = 10000
-    PROGRESS_UPDATE_FREQ = 100
+    PROGRESS_UPDATE_FREQ = LOG_EVERY_N_STEPS // 100
     if conf.useTensorBoard:
         logger = SummaryWriter()
         logEpoch = logEpochTensorboard
