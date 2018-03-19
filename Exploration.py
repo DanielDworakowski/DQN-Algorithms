@@ -234,6 +234,7 @@ class ParallelExplorer(object):
             self.comms.append(sendP)
             self.replayBuffers.append(ReplayBuffer(cfg.numFramesPerBuffer, cfg.stackFrameLen))
             self.followup.append(idx)
+        self.sampleThreads = np.arange(self.nThreads)
         self.nAct = self.processes[0].env.action_space.n
         self.imshape = self.processes[0].env.observation_space.shape
         print('Parent PID: %d'%os.getpid())
@@ -269,9 +270,10 @@ class ParallelExplorer(object):
         curStep = self.totSteps
         self.totSteps += nStep
         #
-        # Select each of the threads to use.
-        thSelect = torch.from_numpy(np.random.choice(self.threads, self.nThreads, replace=False))
-        exploration = np.atleast_1d(torch.from_numpy(np.random.uniform(size=self.nThreads)))
+        # Advance the threads who have done work. 
+        thSelect = self.sampleThreads
+        print(thSelect)
+        exploration = np.atleast_1d(torch.from_numpy(np.random.uniform(size=thSelect.size)))
         randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=self.nThreads, dtype=np.int64))
         self.actionVec.copy_(randomActions)
         runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration > self.exploreSched.value(curStep)])
@@ -326,14 +328,19 @@ class ParallelExplorer(object):
         return self.replayBuffers[threadIdx].sample_latest()
 
     def sample(self, batchSize):
-        bufferSamples = batchSize // self.nThreads
-        extra = batchSize - self.nThreads * bufferSamples
-        extraBuff = np.zeros(self.nThreads, dtype=np.int8)
-        addList = np.random.choice(self.nThreads, replace=False)
-        extraBuff[addList] = 1
+        # bufferSamples = batchSize // self.nThreads
+        # extra = batchSize - self.nThreads * bufferSamples
+        # extraBuff = np.zeros(self.nThreads, dtype=np.int8)
+        # addList = np.random.choice(self.nThreads, replace=False)
+        # extraBuff[addList] = 1
+        
+        assert batchSize <= self.nThreads
+        self.sampleThreads = np.random.choice(self.nThreads, batchSize, replace=False)
+        # for threadIdx in range(self.nThreads):
+            # threadBatch = bufferSamples + extraBuff[threadIdx]
         samplelist = []
-        for threadIdx in range(self.nThreads):
-            threadBatch = bufferSamples + extraBuff[threadIdx]
+        for threadIdx in self.sampleThreads:
+            threadBatch = 1
             samplelist.append(self.sampleFn(threadIdx, threadBatch))
         obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = zip(*samplelist)
         obs_batch = np.concatenate(obs_batch)
