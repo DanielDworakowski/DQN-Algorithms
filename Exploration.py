@@ -40,7 +40,7 @@ class EpsilonGreedy(object):
         # Epsilon greedy exploration.
         action = None
         if random.random() < self.exploreSched.value(self.nSteps):
-            action = np.random.randint(0, self.nAct, dtype=np.int_)
+            action = np.random.randint(0, self.nAct, dtype=np.int64)
         else:
             obs = self.toTensorImg(np.expand_dims(self.replay_buffer.encode_recent_observation(), axis=0))
             #
@@ -50,7 +50,7 @@ class EpsilonGreedy(object):
             _, action = self.model(Variable(obs, volatile=True)).max(1)
             self.model.train(mode)
             # _, action = targetQ_func(Variable(obs, volatile=True)).max(1)
-            action = action.data.cpu().numpy().astype(np.int_)
+            action = action.data.cpu().numpy().astype(np.int64)
         self.lastObs, reward, done, info = self.env.step(action)
         #
         # Step and save transition.
@@ -132,6 +132,7 @@ class ExploreProcess(mp.Process):
         #
         # Shared memory to transfer the action commands.
         self.actionVec = actionVec
+        self.stor = self.actionVec.storage()
         self.barrier = barrier
         print('Initialized process ', procId)
 
@@ -165,7 +166,7 @@ class ExploreProcess(mp.Process):
             #
             # Wait for actions.
             step = self.com.recv()
-            action = self.actionVec.numpy().astype(np.int_)[self.procId]
+            action = self.actionVec.clone().numpy().astype(np.int64)[self.procId]
             obs, reward, done, info = self.env.step(action)
             #
             # Step and save transition.
@@ -210,9 +211,9 @@ class ParallelExplorer(object):
         self.maxBuffers = cfg.numFramesPerBuffer
         self.exploreSched = cfg.exploreSched
         self.model = cfg.model
-        self.actionVec = torch.LongTensor(self.nThreads)
+        self.actionVec = torch.LongTensor(self.nThreads).zero_()
         self.actionVec.storage().share_memory_()
-        self.threads = np.atleast_1d(np.arange(self.nThreads, dtype=np.int_))
+        self.threads = np.atleast_1d(np.arange(self.nThreads, dtype=np.int64))
         self.toTensorImg, self.toTensor, self.use_cuda = TensorConfig.getTensorConfiguration()
         self.cfg = cfg
         self.barrier = mp.Barrier(self.nThreads + 1)
@@ -271,9 +272,9 @@ class ParallelExplorer(object):
         # Select each of the threads to use.
         thSelect = torch.from_numpy(np.random.choice(self.threads, self.nThreads, replace=False))
         exploration = np.atleast_1d(torch.from_numpy(np.random.uniform(size=self.nThreads)))
-        randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=self.nThreads, dtype=np.int_))
+        randomActions = torch.from_numpy(np.random.randint(0, self.nAct, size=self.nThreads, dtype=np.int64))
         self.actionVec.copy_(randomActions)
-        runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration < self.exploreSched.value(curStep)])
+        runNetIdx = np.atleast_1d(np.atleast_1d(self.threads[thSelect])[exploration > self.exploreSched.value(curStep)])
         obsList = []
         #
         # Ensure that we actually even want to do anything.

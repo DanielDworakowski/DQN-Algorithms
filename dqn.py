@@ -18,13 +18,26 @@ import torchvision.transforms as transforms
 # Visualize a batch.
 def visobs(obs):
     from PIL import Image
-    obsBatch = obs.data.cpu().numpy()
+    obsBatch = obs.cpu().numpy()
     for i, obs in enumerate(obsBatch):
         for plane in obs:
             img = Image.fromarray(plane*255)
             img.show()
         if i == 5:
             sys.exit(0)
+#
+# Visualize a batch.
+def visobsnp(obs):
+    from PIL import Image
+    obsBatch = obs
+    for i, obs in enumerate(obsBatch):
+        
+        for p in range(obs.shape[2]):
+            img = Image.fromarray(obs[...,p])
+            img.show()
+        if i == 5:
+            sys.exit(0)
+    sys.exit(0)
 #
 # Logging configuration.
 def logEpochTensorboard(logger, model, epochSummary, t):
@@ -106,6 +119,7 @@ def learn(conf):
                 #
                 # Sample from replay buffer.
                 sample = explorer.sample(conf.batch_size)
+                obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = sample
                 #
                 # Get the objective information (bellman eq).
                 trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, conf.gamma)
