@@ -58,6 +58,7 @@ class Objective(object):
         # Calculate the belman error.
         expectedQ.volatile = False
         expectedQ = expectedQ.mul_(gamma) + rew
+        expectedQ.unsqueeze_(-1)
         return trainQ, expectedQ
 
     def __call__(self, *kwargs):
