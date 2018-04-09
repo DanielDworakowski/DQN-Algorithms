@@ -1,4 +1,5 @@
 import torch
+import runUtil
 import datetime
 import Objectives
 import Exploration
@@ -12,7 +13,7 @@ from models import DeepMindModel
 class DefaultConfig(object):
     #
     # Originally made on 0.9.7
-    def __init__(self, seed, cfg, expName = '', objtype = Objectives.Objective_type.DQN_VANILLA):
+    def __init__(self, seed, cfg=runUtil.getCallingFileName(), expName = '', objtype = Objectives.Objective_type.DQN_VANILLA):
         #
         # Whether to use TB.
         self.useTensorBoard = False
@@ -22,8 +23,8 @@ class DefaultConfig(object):
         num_iterations = float(self.num_timesteps) / 4.0
         #
         # Setup the environment.
-        self.envName = 'PongNoFrameskip-v0'
-        # self.envName = 'PongNoFrameskip-v4'
+        # self.envName = 'PongNoFrameskip-v0'
+        self.envName = 'PongNoFrameskip-v4'
         self.env = configureEnv(seed, self.envName)
         #
         # Create the q_function model.
@@ -41,6 +42,7 @@ class DefaultConfig(object):
                                 (0, 1.0),
                                 (1e6, 0.1),
                                 (num_iterations / 1.3, 0.02),
+                                # (num_iterations / 2, 0.01),
                             ], outside_value=0.02)
         #
         # Size of replay buffer.
@@ -87,7 +89,7 @@ class DefaultConfig(object):
         #
         # Prefix for a tensorboard experiment.
         base = 'runs/{date:%Y-%m-%d-%H:%M:%S}_'.format(date=datetime.datetime.now())
-        self.tbPrefix = base + '%s_%s_seed-%d_%s'%(self.envName, cfg, seed, expName)
+        self.tbName = base + '%s_%s_seed-%d_%s'%(self.envName, cfg, seed, expName)
         #
         # Exploration scheduler.
         def sched(epoch):
@@ -118,4 +120,4 @@ class Config(DefaultConfig):
     #
     # Initialize.
     def __init__(self, seed, expName):
-        super(Config, self).__init__(seed, cfg='Default', expName=expName)
+        super(Config, self).__init__(seed, expName=expName)
