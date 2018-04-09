@@ -91,7 +91,7 @@ def learn(conf):
     LOG_EVERY_N_STEPS = conf.logPeriod
     PROGRESS_UPDATE_FREQ = LOG_EVERY_N_STEPS // 100
     if conf.useTensorBoard:
-        logger = SummaryWriter()
+        logger = SummaryWriter(conf.tbName)
         logEpoch = logEpochTensorboard
         closeLogger = closeTensorboard
     #

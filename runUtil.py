@@ -1,7 +1,7 @@
 import os
 import inspect
 
-def getConfigName():
+def getCallingFileName():
     frame = inspect.stack()[1]
     module = inspect.getmodule(frame[0])
     filename = module.__file__
