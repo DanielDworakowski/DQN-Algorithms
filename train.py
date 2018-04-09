@@ -18,10 +18,10 @@ def getInputArgs():
     return args
 #
 # Get the configuration, override as needed.
-def getConfig(args):
+def getConfig(args, expName):
     config_module = __import__('config.' + args.configStr)
     configuration = getattr(config_module, args.configStr)
-    conf = configuration.Config(args.seed)
+    conf = configuration.Config(args.seed, expName)
     #
     # Modifications to the configuration happen here.
     conf.useTensorBoard = args.useTB
