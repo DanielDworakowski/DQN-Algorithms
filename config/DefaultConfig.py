@@ -1,4 +1,5 @@
 import torch
+import datetime
 import Objectives
 import Exploration
 import TensorConfig
@@ -9,8 +10,9 @@ from atari_wrappers import *
 from models import DeepMindModel
 
 class DefaultConfig(object):
-
-    def __init__(self, seed, objtype = Objectives.Objective_type.DQN_VANILLA):
+    #
+    # Originally made on 0.9.7
+    def __init__(self, seed, cfg, expName = '', objtype = Objectives.Objective_type.DQN_VANILLA):
         #
         # Whether to use TB.
         self.useTensorBoard = False
@@ -20,7 +22,9 @@ class DefaultConfig(object):
         num_iterations = float(self.num_timesteps) / 4.0
         #
         # Setup the environment.
-        self.env = configureEnv(seed)
+        self.envName = 'PongNoFrameskip-v0'
+        # self.envName = 'PongNoFrameskip-v4'
+        self.env = configureEnv(seed, self.envName)
         #
         # Create the q_function model.
         self.q_func = DeepMindModel.atari_model(self.env.action_space.n)
@@ -81,6 +85,10 @@ class DefaultConfig(object):
         # Objective function.
         self.objective = Objectives.Objective(self.tensorCfg, objtype)
         #
+        # Prefix for a tensorboard experiment.
+        base = 'runs/{date:%Y-%m-%d-%H:%M:%S}_'.format(date=datetime.datetime.now())
+        self.tbPrefix = base + '%s_%s_seed-%d_%s'%(self.envName, cfg, seed, expName)
+        #
         # Exploration scheduler.
         def sched(epoch):
             return self.lr_schedule.value(epoch)
@@ -110,4 +118,4 @@ class Config(DefaultConfig):
     #
     # Initialize.
     def __init__(self, seed):
-        super(Config, self).__init__(seed)
+        super(Config, self).__init__(seed, cfg='Default')

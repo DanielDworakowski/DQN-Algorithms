@@ -19,9 +19,9 @@ class Config(DefaultConfig):
         # Dont need to wait since we are going sequentially, but allow for some randomness.
         self.learning_starts = 50
         self.learning_freq = 1
-        self.epsilonStepSize = 4 # To match single step learning frequency.
+        self.epsilonStepSize = 1 # To match single step learning frequency.
     #
     # Override the explorer configuration.
     def getExplorer(self):
-        explorer = Exploration.ParallelExplorer(self.parallelCfg)
+        explorer = Exploration.ParallelExplorer(self.parallelCfg, cfg='parallel')
         return explorer

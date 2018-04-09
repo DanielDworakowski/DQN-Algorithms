@@ -31,7 +31,7 @@ def visobsnp(obs):
     from PIL import Image
     obsBatch = obs
     for i, obs in enumerate(obsBatch):
-        
+
         for p in range(obs.shape[2]):
             img = Image.fromarray(obs[...,p])
             img.show()
