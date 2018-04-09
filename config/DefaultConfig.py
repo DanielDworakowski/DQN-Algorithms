@@ -27,6 +27,10 @@ class DefaultConfig(object):
         self.envName = 'PongNoFrameskip-v4'
         self.env = configureEnv(seed, self.envName)
         #
+        # The reward expected before completion.
+        # This changes from environment to environment!
+        self.rewardForCompletion = 20.
+        #
         # Create the q_function model.
         self.q_func = DeepMindModel.atari_model(self.env.action_space.n)
         #

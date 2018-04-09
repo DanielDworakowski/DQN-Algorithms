@@ -73,8 +73,8 @@ def learn(conf):
     #
     # Construct support objects for learning.
     num_param_updates = 0
-    mean_episode_reward = -float('nan')
-    best_mean_episode_reward = -float('inf')
+    meanEpReward = -float('nan')
+    bestMeanReward = -float('inf')
     optimizer = conf.optimizer
     trainQ_func = conf.q_func
     targetQ_func = copy.deepcopy(trainQ_func).eval()
@@ -105,7 +105,7 @@ def learn(conf):
     for t in itertools.count():
         #
         # Check if we are done.
-        if explorer.shouldStop():
+        if explorer.shouldStop() or meanEpReward > conf.rewardForCompletion:
             break
         #
         # Exploration.
@@ -147,11 +147,11 @@ def learn(conf):
                         targetQ_func.cuda()
         #
         # Statistics.
-        mean_episode_reward = explorer.getRewards()
-        if not np.isnan(mean_episode_reward):
-            best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+        meanEpReward = explorer.getRewards()
+        if not np.isnan(meanEpReward):
+            bestMeanReward = max(bestMeanReward, meanEpReward)
         else:
-            mean_episode_reward = -float('nan')
+            meanEpReward = -float('nan')
         #
         # TB and print
         if t % (LOG_EVERY_N_STEPS) == 0:
@@ -161,8 +161,8 @@ def learn(conf):
             lossUpdates = 0
             runningLoss = 0
             print("Timestep %d" % (t,))
-            print("mean reward (100 episodes) %f" % mean_episode_reward)
-            print("best mean reward %f" % best_mean_episode_reward)
+            print("mean reward (100 episodes) %f" % meanEpReward)
+            print("best mean reward %f" % bestMeanReward)
             print("episodes %d" % explorer.getNumEps())
             print("Exploration %f" % explorer.epsilon())
             print("learning_rate ", lr_schedule.get_lr())
@@ -173,8 +173,8 @@ def learn(conf):
             pbar = tqdm(total=LOG_EVERY_N_STEPS * explorer.stepSize())
             loss = -float('nan')
             summary = {
-                'Mean reward (100 episodes)': np.atleast_1d(mean_episode_reward),
-                'Best mean reward': np.atleast_1d(best_mean_episode_reward),
+                'Mean reward (100 episodes)': np.atleast_1d(meanEpReward),
+                'Best mean reward': np.atleast_1d(bestMeanReward),
                 'Episodes': explorer.getNumEps(),
                 'Learning rate': lr_schedule.get_lr()[0],
                 'Exploration': explorer.epsilon(),
