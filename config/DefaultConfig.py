@@ -1,9 +1,9 @@
 import torch
-import runUtil
 import datetime
 import Objectives
 import Exploration
 import TensorConfig
+from runUtil import *
 from dqn_utils import *
 from gym import wrappers
 from ConfigureEnv import *
@@ -13,7 +13,7 @@ from models import DeepMindModel
 class DefaultConfig(object):
     #
     # Originally made on 0.9.7
-    def __init__(self, seed, cfg=runUtil.getCallingFileName(), expName = '', objtype = Objectives.Objective_type.DQN_VANILLA):
+    def __init__(self, seed, cfg = getCallingFileName(), expName = '', objtype = Objectives.Objective_type.DQN_VANILLA):
         #
         # Whether to use TB.
         self.useTensorBoard = False
@@ -58,6 +58,9 @@ class DefaultConfig(object):
         # How to convert numpy to tensors (CUDA conversion and so on).
         self.tensorCfg = TensorConfig.getTensorConfiguration()
         #
+        # The starting timestep.
+        self.tstep = 0
+        #
         # Batch size for learning.
         self.batch_size = 32
         #
@@ -93,7 +96,11 @@ class DefaultConfig(object):
         #
         # Prefix for a tensorboard experiment.
         base = 'runs/{date:%Y-%m-%d-%H:%M:%S}_'.format(date=datetime.datetime.now())
-        self.tbName = base + '%s_%s_seed-%d_%s'%(self.envName, cfg, seed, expName)
+        self.runName = '%s_%s_seed-%d_%s'%(self.envName, cfg, seed, expName)
+        self.tbName = base + self.runName
+        #
+        # Where to save models.
+        self.modelSavePath = '/disk1/rlmodel/'
         #
         # Exploration scheduler.
         def sched(epoch):
@@ -118,6 +125,33 @@ class DefaultConfig(object):
         torch.manual_seed(seed)
         np.random.seed(seed)
         random.seed(seed)
+    #
+    # Load a pre-trained model.
+    def loadModel(self, loadPath):
+        #
+        # Check if model exists.
+        if loadPath != None and os.path.isfile(loadPath):
+            #
+            # Load the model based on where on whether it needs to go to the cpu / gpu.
+            checkpoint = None
+            if self.tensorCfg[2]:
+                checkpoint = torch.load(self.modelLoadPath)
+            else:
+                printColour('Model will be converted to run on CPU', colours.WARNING)
+                checkpoint = torch.load(self.modelLoadPath, map_location={'cuda:0': 'cpu'})
+            #
+            # Ensure that the model type matches and load.
+            if type(checkpoint['model']) == type(self.q_func):
+                self.modelLoadPath = loadPath
+                self.model = checkpoint['model']
+                self.model.load_state_dict(checkpoint['state_dict'])
+                self.optimizer.load_state_dict(checkpoint['optimizer'])
+                self.tstep = checkpoint['timestep']
+                printColour('Loaded model from path: %s'%loadPath, colours.OKBLUE)
+            else:
+                printError('Loaded model from path: %s is of type: (%s) while the specified model is of type: (%s)'%(loadPath, type(checkpoint['model']), type(self.hyperparam.model)))
+        elif loadPath != None:
+            printError('Unable to load specified model: %s'%(loadPath))
 #
 # Class to use the default configuration.
 class Config(DefaultConfig):

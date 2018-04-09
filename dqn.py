@@ -59,6 +59,22 @@ def closeTensorboard(logger):
 def doNothing(logger = None, model = None, tmp = None, tmp1 = None):
     pass
 #
+# Log models.
+def saveCheckpoint(tstep, model, optimizer, reward, conf):
+    #
+    # Save state.
+    state = {
+                'tstep': tstep,
+                'state_dict': model.state_dict(),
+                'optimizer' : optimizer.state_dict(),
+                'model': model,
+                # 'conf': conf
+            }
+    savePath = '%s/%s_tstep-%s_rwd-%1.2f.pth.tar'%(conf.modelSavePath, conf.runName, tstep, reward)
+    torch.save(state, savePath)
+    # if isBest:
+    #     shutil.move(savePath, '%s/%s_model_best.pth.tar'%(self.conf.modelSavePath, conf.tbName))
+#
 # Training fn.
 def learn(conf):
 
@@ -75,6 +91,7 @@ def learn(conf):
     num_param_updates = 0
     meanEpReward = -float('nan')
     bestMeanReward = -float('inf')
+    bestSavedModelReward = -float('inf')
     optimizer = conf.optimizer
     trainQ_func = conf.q_func
     targetQ_func = copy.deepcopy(trainQ_func).eval()
@@ -102,7 +119,7 @@ def learn(conf):
     #
     # Training loop.
     pbar = None
-    for t in itertools.count():
+    for t in itertools.count(start=conf.tstep):
         #
         # Check if we are done.
         if explorer.shouldStop() or meanEpReward > conf.rewardForCompletion:
@@ -181,6 +198,7 @@ def learn(conf):
                 'Train loss': loss_avg,
             }
             logEpoch(logger, trainQ_func, summary, t)
+            saveCheckpoint(t, trainQ_func, optimizer, meanEpReward, conf)
         #
         # Progress bar update.
         if t % PROGRESS_UPDATE_FREQ == 0:
