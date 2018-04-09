@@ -13,7 +13,7 @@ def getInputArgs():
     parser.add_argument('--useTB', dest='useTB', default=False, action='store_true', help='Whether or not to log to Tesnor board.')
     parser.add_argument('--expName', dest='expName', default='', type=str, help='What to prefix names with on TB.')
     parser.add_argument('--config', dest='configStr', default='DefaultConfig', type=str, help='Name of the config file to import.')
-    parser.add_argument('--seed', dest='seed', default=1, help='Random seed.')
+    parser.add_argument('--seed', dest='seed', default=1, type=int, help='Random seed.')
     args = parser.parse_args()
     return args
 #
