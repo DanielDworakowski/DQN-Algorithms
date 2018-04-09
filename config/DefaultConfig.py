@@ -117,5 +117,5 @@ class DefaultConfig(object):
 class Config(DefaultConfig):
     #
     # Initialize.
-    def __init__(self, seed):
-        super(Config, self).__init__(seed, cfg='Default')
+    def __init__(self, seed, expName):
+        super(Config, self).__init__(seed, cfg='Default', expName)

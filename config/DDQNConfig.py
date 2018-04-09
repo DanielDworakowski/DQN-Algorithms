@@ -5,5 +5,5 @@ from config.DefaultConfig import DefaultConfig
 class Config(DefaultConfig):
     #
     # Initialize.
-    def __init__(self, seed):
-        super(Config, self).__init__(seed, Objectives.Objective_type.DDQN, cfg='DDQN')
+    def __init__(self, seed, expName):
+        super(Config, self).__init__(seed, Objectives.Objective_type.DDQN, cfg='DDQN', expName=expName)

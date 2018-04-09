@@ -5,8 +5,8 @@ from config.DefaultConfig import DefaultConfig
 class Config(DefaultConfig):
     #
     # Setup parallel configuration for sequential with no real replay buffer.
-    def __init__(self, seed):
-        super(Config, self).__init__(seed)
+    def __init__(self, seed, expName):
+        super(Config, self).__init__(seed, cfg='parallel', expName=expName)
         self.parallelCfg = Exploration.ExploreParallelCfg()
         self.parallelCfg.model = self.q_func
         self.parallelCfg.exploreSched = self.explorationSched
@@ -23,5 +23,5 @@ class Config(DefaultConfig):
     #
     # Override the explorer configuration.
     def getExplorer(self):
-        explorer = Exploration.ParallelExplorer(self.parallelCfg, cfg='parallel')
+        explorer = Exploration.ParallelExplorer(self.parallelCfg)
         return explorer
