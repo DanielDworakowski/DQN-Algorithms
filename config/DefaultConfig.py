@@ -3,7 +3,7 @@ import datetime
 import Objectives
 import Exploration
 import TensorConfig
-from runUtil import *
+from RunUtil import *
 from dqn_utils import *
 from gym import wrappers
 from ConfigureEnv import *
