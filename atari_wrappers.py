@@ -157,10 +157,11 @@ def wrap_deepmind_ram(env):
 def wrap_deepmind(env):
     assert 'NoFrameskip' in env.spec.id
     env = EpisodicLifeEnv(env)
-    env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
+    else:
+        env = NoopResetEnv(env, noop_max=30)
     env = WarpFrame(env)
     env = ClipRewardEnv(env)
     return env

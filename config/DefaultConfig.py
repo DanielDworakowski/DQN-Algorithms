@@ -12,8 +12,8 @@ from models import DeepMindModel
 
 class DefaultConfig(object):
     #
-    # Originally made on 0.9.7
-    def __init__(self, seed, cfg = getCallingFileName(), expName = '', objtype = Objectives.Objective_type.DQN_VANILLA):
+    #
+    def __init__(self, seed, envName = 'PongNoFrameskip-v4', cfg = getCallingFileName(), expName = '', objtype = Objectives.Objective_type.DQN_VANILLA):
         #
         # Whether to use TB.
         self.useTensorBoard = False
@@ -24,12 +24,18 @@ class DefaultConfig(object):
         #
         # Setup the environment.
         # self.envName = 'PongNoFrameskip-v0'
-        self.envName = 'PongNoFrameskip-v4'
+        # self.envName = 'PongNoFrameskip-v4'
+        self.envName = envName
         self.env = configureEnv(seed, self.envName)
         #
         # The reward expected before completion.
         # This changes from environment to environment!
-        self.rewardForCompletion = 20.
+        completionScores = {
+            'PongNoFrameskip-v4': 20,
+            'SpaceInvadersNoFrameskip-v4': 999999,
+            'ZaxxonNoFrameskip-v4': 999999
+        }
+        self.rewardForCompletion = completionScores[envName]
         #
         # Create the q_function model.
         self.q_func = DeepMindModel.atari_model(self.env.action_space.n)
@@ -157,5 +163,5 @@ class DefaultConfig(object):
 class Config(DefaultConfig):
     #
     # Initialize.
-    def __init__(self, seed, expName):
-        super(Config, self).__init__(seed, expName=expName)
+    def __init__(self, seed, envName, expName):
+        super(Config, self).__init__(seed, envName=envName, expName=expName)
