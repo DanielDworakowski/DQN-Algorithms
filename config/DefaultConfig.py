@@ -3,6 +3,7 @@ import datetime
 import Objectives
 import Exploration
 import TensorConfig
+import loss
 from RunUtil import *
 from dqn_utils import *
 from gym import wrappers
@@ -13,7 +14,7 @@ from models import DeepMindModel
 class DefaultConfig(object):
     #
     # Originally made on 0.9.7
-    def __init__(self, seed, cfg = getCallingFileName(), expName = '', objtype = Objectives.Objective_type.DQN_VANILLA):
+    def __init__(self, seed, cfg = getCallingFileName(), expName = '', objtype = Objectives.Objective_type.DQN_VANILLA, model=DeepMindModel.atari_model):
         #
         # Whether to use TB.
         self.useTensorBoard = False
@@ -32,10 +33,13 @@ class DefaultConfig(object):
         self.rewardForCompletion = 20.
         #
         # Create the q_function model.
-        self.q_func = DeepMindModel.atari_model(self.env.action_space.n)
+        self.q_func = model(self.env.action_space.n)
         #
         # Create the optimizer.
         self.optimizer = torch.optim.Adam(self.q_func.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-4, weight_decay=0)
+        #
+        # Create loss calculator.
+        self.loss_calculator = loss.LossL1()
         #
         # Learning schedule.
         lr_multiplier = 1.0

@@ -142,7 +142,7 @@ def learn(conf):
                 trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, conf.gamma)
                 #
                 # Calculate Huber loss.
-                loss = F.smooth_l1_loss(trainQ, targetQ)
+                loss = conf.loss_calculator(trainQ_func, trainQ, targetQ)
                 runningLoss += loss.data[0]
                 #
                 # Optimize the model.
