@@ -22,7 +22,7 @@ def getInputArgs():
 def getConfig(args, expName):
     config_module = __import__('config.' + args.configStr)
     configuration = getattr(config_module, args.configStr)
-    conf = configuration.Config(args.seed, args.envName, expName=expName)
+    conf = configuration.Config(args.seed, args.envName, expName)
     #
     # Modifications to the configuration happen here.
     conf.useTensorBoard = args.useTB
@@ -37,7 +37,7 @@ def main():
     args = getInputArgs()
     #
     # Get configuration.
-    conf = getConfig(args, expName=args.expName)
+    conf = getConfig(args, args.expName)
     #
     # The learning fn.
     doRL(conf)

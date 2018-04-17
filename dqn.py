@@ -44,8 +44,10 @@ def logEpochTensorboard(logger, model, epochSummary, t):
     # logger.add_scalar('%s_loss'%epochSummary['phase'], epochSummary['loss'], epochSummary['epoch'])
     # logger.add_scalar('%s_acc'%epochSummary['phase'], epochSummary['acc'], epochSummary['epoch'])
     # labels = epochSummary['data']['label']
-    # for i in range(epochSummary['data']['label'].shape[0]):
-    #     logger.add_image('{}_image_i-{}_epoch-{}_pre-:{}_label-{}'.format(epochSummary['phase'], i, epochSummary['epoch'], epochSummary['pred'][i], int(labels[i])), epochSummary['data']['img'][i]*math.sqrt(0.06342617) + 0.59008044, epochSummary['epoch'])
+    if model.reconst is not None:
+        for i in range(min(model.reconst.shape[0], 4)):
+            for plane in range(model.reconst.shape[1]):
+                logger.add_image('{}_image_i_{}_plane_{}'.format(t, i, plane), model.reconst[i, plane], t)
     for key in epochSummary:
         logger.add_scalar(key, epochSummary[key], t)
     for name, param in model.named_parameters():
@@ -142,7 +144,7 @@ def learn(conf):
                 trainQ, targetQ = objective(trainQ_func, targetQ_func, sample, conf.gamma)
                 #
                 # Calculate Huber loss.
-                loss = F.smooth_l1_loss(trainQ, targetQ)
+                loss = conf.loss_calculator(trainQ_func, trainQ, targetQ)
                 runningLoss += loss.data[0]
                 #
                 # Optimize the model.
