@@ -20,6 +20,7 @@ def getInputArgs():
 #
 # Get the configuration, override as needed.
 def getConfig(args, expName):
+    print(args.configStr)
     config_module = __import__('config.' + args.configStr)
     configuration = getattr(config_module, args.configStr)
     conf = configuration.Config(args.seed, args.envName, expName)

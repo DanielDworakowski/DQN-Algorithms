@@ -30,7 +30,7 @@ def main():
         # Seed cannot be 0
         seed = args.seedBase + tp
         tmuxBeginCmd = 'tmux new -d -s %s%d '%(args.expName,seed)
-        traincmd = '\'python train.py --config %s --seed %d --expName %s --useTB --env %s\''%(cfg, seed, exp, envs[eID])
+        traincmd = '\'python train.py --config %s --seed %d --expName %s --useTB --env %s\''%(cfg, seed, exp + '_' + str(tp), envs[eID])
         # cmdList = tmuxBeginCmd.split()
         # cmdList.append(traincmd)
         # print(' '.join(cmdList))

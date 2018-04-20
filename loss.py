@@ -20,8 +20,8 @@ class LossAutoencoder(object):
 
     def __call__(self, trainQ_func, trainQ, targetQ):
         loss = F.smooth_l1_loss(trainQ, targetQ)
-        lossMSE = F.mse_loss(trainQ_func.reconst, trainQ_func.x)
-        lossMSE /= lossMSE
-        lossMSE *= loss * self.mse_gain
+        lossMSE = F.mse_loss(trainQ_func.reconst, trainQ_func.x) * self.mse_gain
+        # lossMSE /= lossMSE
+        # lossMSE *= loss * self.mse_gain
         loss += lossMSE
         return loss
