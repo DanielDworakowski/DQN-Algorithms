@@ -1,3 +1,4 @@
+
 import sys
 import copy
 import random
@@ -41,9 +42,6 @@ def visobsnp(obs):
 #
 # Logging configuration.
 def logEpochTensorboard(logger, model, epochSummary, t):
-    # logger.add_scalar('%s_loss'%epochSummary['phase'], epochSummary['loss'], epochSummary['epoch'])
-    # logger.add_scalar('%s_acc'%epochSummary['phase'], epochSummary['acc'], epochSummary['epoch'])
-    # labels = epochSummary['data']['label']
     if model.reconst is not None:
         for i in range(min(model.reconst.shape[0], 4)):
             for plane in range(model.reconst.shape[1]):
@@ -74,8 +72,6 @@ def saveCheckpoint(tstep, model, optimizer, reward, conf):
             }
     savePath = '%s/%s_tstep-%s_rwd-%1.2f.pth.tar'%(conf.modelSavePath, conf.runName, tstep, reward)
     torch.save(state, savePath)
-    # if isBest:
-    #     shutil.move(savePath, '%s/%s_model_best.pth.tar'%(self.conf.modelSavePath, conf.tbName))
 #
 # Training fn.
 def learn(conf):

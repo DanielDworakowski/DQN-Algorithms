@@ -95,6 +95,12 @@ def makePlots(env, cfg, paths, args, ax):
     lossStats = getStats(losses)
     # 
     # Plot the plots.
+    translator = {
+        'DefaultConfig': 'DQN',
+        'type.DDQN': 'DDQN',
+        'QNEncodedConfig': 'Autoencoder Loss',
+    }
+    cfg = translator[cfg]
     maxax.plot(stps, bestStats[2], label = cfg)
     maxax.fill_between(stps, bestStats[1], bestStats[0],alpha=0.5)
     meanax.plot(stps, meanStats[2], label = cfg)
