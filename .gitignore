@@ -6,7 +6,7 @@ runs*/
 # C extensions
 *.so
 *.perf
-
+*.png
 # Distribution / packaging
 .Python
 env/
